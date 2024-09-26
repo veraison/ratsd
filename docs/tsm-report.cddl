@@ -1,0 +1,8 @@
+{
+  "auxblob": bstr
+  "manifestblob": bstr
+  "outblob": bstr
+  "privlevel_floor": bstr
+  "provider": bstr
+  "service_provider": bstr
+}
