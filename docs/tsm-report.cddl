@@ -1,8 +1,8 @@
 {
-  "auxblob": bstr
-  "manifestblob": bstr
+  ? "auxblob": bstr
+  ? "manifestblob": bstr ; requires service_provider
   "outblob": bstr
-  "privlevel_floor": bstr
+  ? "privlevel_floor": bstr
   "provider": bstr
-  "service_provider": bstr
+  ? "service_provider": bstr
 }
