@@ -1,4 +1,4 @@
-{
+tsm-report = {
   ? "auxblob": bstr
   ? "manifestblob": bstr ; requires service_provider
   "outblob": bstr
