@@ -1,8 +1,8 @@
 tsm-report = {
   ? "auxblob": bstr
-  ? "manifestblob": bstr ; requires service_provider
   "outblob": bstr
-  ? "privlevel_floor": bstr
   "provider": bstr
-  ? "service_provider": bstr
+  ? service-report
 }
+service-report //= ("manifestblob": bstr, "service_provider": bstr)
+service-report //= ("service_provider": bstr)
