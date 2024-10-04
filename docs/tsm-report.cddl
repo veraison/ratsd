@@ -1,8 +1,8 @@
-{
-  "auxblob": bstr
-  "manifestblob": bstr
+tsm-report = {
+  ? "auxblob": bstr
   "outblob": bstr
-  "privlevel_floor": bstr
   "provider": bstr
-  "service_provider": bstr
+  ? service-report
 }
+service-report //= ("manifestblob": bstr, "service_provider": bstr)
+service-report //= ("service_provider": bstr)
