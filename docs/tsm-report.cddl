@@ -1,14 +1,14 @@
 tsm-report = {
   ? auxblob: binary-string
   outblob: binary-string
-  provider: binary-string
+  provider: tstr
   ? service-report
 }
 
 service-report = ((
   manifestblob: binary-string
-  service_provider: binary-string
-) // service_provider: binary-string)
+  service_provider: tstr
+) // service_provider: tstr)
 
 binary-string = base64url-string .feature "json" / bstr .feature "cbor"
 
