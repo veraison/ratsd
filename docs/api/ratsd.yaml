@@ -1,0 +1,148 @@
+openapi: 3.0.0
+info:
+  title: RATS Evidence Collection Daemon
+  version: 0.0.1
+tags: []
+paths:
+  /ratsd/chares:
+    post:
+      operationId: Ratsd_chares
+      parameters:
+        - $ref: '#/components/parameters/ChaResRequestParameters.accept'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/eat+jwt; eat_profile="tag:github.com,2024:veraison/ratsd":
+              schema:
+                $ref: '#/components/schemas/EAT'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/UnauthorizedError'
+      requestBody:
+        required: true
+        content:
+          application/vnd.veraison.chares+json:
+            schema:
+              $ref: '#/components/schemas/ChaResRequest'
+      security:
+        - BearerAuth: []
+components:
+  parameters:
+    ChaResRequestParameters.accept:
+      name: accept
+      in: header
+      required: false
+      schema:
+        type: string
+  schemas:
+    BadRequestError:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          enum:
+            - tag:github.com,2024:veraison/ratsd:error:invalidrequest
+        title:
+          type: string
+          enum:
+            - invalid request
+        status:
+          type: number
+          enum:
+            - 400
+        detail:
+          type: string
+        instance:
+          type: string
+    CMW:
+      type: object
+      required:
+        - typ
+        - val
+      properties:
+        typ:
+          type: string
+          enum:
+            - application/vnd.veraison.configfs-tsm+json
+        val:
+          type: string
+          format: base64url
+    ChaResRequest:
+      type: object
+      required:
+        - nonce
+      properties:
+        nonce:
+          type: string
+          format: base64url
+    EAT:
+      type: object
+      required:
+        - eat_profile
+        - nested-token
+      properties:
+        eat_profile:
+          type: string
+          enum:
+            - tag:github.com,2024:veraison/ratsd
+        nested-token:
+          $ref: '#/components/schemas/CMW'
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+    UnauthorizedError:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          enum:
+            - tag:github.com,2024:veraison/ratsd:error:unauthorized
+        title:
+          type: string
+          enum:
+            - access unautorized
+        status:
+          type: number
+          enum:
+            - 401
+        detail:
+          type: string
+        instance:
+          type: string
+    Versions:
+      type: string
+      enum:
+        - 0.0.1
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
