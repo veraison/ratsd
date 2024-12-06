@@ -1,0 +1,22 @@
+name: API checks
+
+on:
+  push:
+    paths:
+    - 'docs/api/**'
+  pull_request:
+    paths:
+    - 'docs/api/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install OpenAPI spec validator
+      run: pip install openapi-spec-validator
+
+    - name: Check RATSD API
+      run: make -C docs/api check
