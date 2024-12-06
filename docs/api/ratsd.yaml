@@ -128,7 +128,7 @@ components:
         title:
           type: string
           enum:
-            - access unautorized
+            - access unauthorized
         status:
           type: number
           enum:
