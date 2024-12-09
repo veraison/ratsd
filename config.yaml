@@ -1,0 +1,5 @@
+logging:
+  level: debug  # valid levels: error, warning, info, debug
+ratsd:
+  listen-addr: 0.0.0.0:8895
+  protocol: http
