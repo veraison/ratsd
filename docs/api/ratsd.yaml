@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: RATS Evidence Collection Daemon
+  title: RATS Evidence Collection Daemon API
   version: 0.0.1
 tags: []
 paths:
