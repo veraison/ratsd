@@ -6,6 +6,7 @@ tags: []
 paths:
   /ratsd/chares:
     post:
+      description: Challenge response API. Accepts a challenge and, upon success, generates the evidence in EAT w/ CMW format.
       operationId: Ratsd_chares
       parameters:
         - $ref: '#/components/parameters/ChaResRequestParameters.accept'
