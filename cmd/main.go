@@ -2,7 +2,9 @@ package main
 
 import (
 	"errors"
+	"net/http"
 
+	"github.com/veraison/ratsd/api"
 	"github.com/veraison/services/config"
 	"github.com/veraison/services/log"
 )
@@ -54,5 +56,22 @@ func main() {
 	loader := config.NewLoader(&cfg)
 	if err = loader.LoadFromViper(subs["ratsd"]); err != nil {
 		log.Fatalf("Could not load config: %v", err)
+	}
+
+	svr := api.NewServer(log.Named("api"))
+	r := http.NewServeMux()
+	h := api.HandlerFromMux(svr, r)
+
+	s := &http.Server{
+		Handler: h,
+		Addr:    cfg.ListenAddr,
+	}
+
+	if cfg.Protocol == "https" {
+		log.Infow("initializing ratsd HTTPS service", "address", cfg.ListenAddr)
+		log.Fatal(s.ListenAndServeTLS(cfg.Cert, cfg.CertKey))
+	} else {
+		log.Infow("initializing ratsd HTTP service", "address", cfg.ListenAddr)
+		log.Fatal(s.ListenAndServe())
 	}
 }
