@@ -38,7 +38,7 @@ func main() {
 
 	cfg := cfg{
 		ListenAddr: DefaultListenAddr,
-		Protocol:   "http",
+		Protocol:   "https",
 	}
 
 	subs, err := config.GetSubs(v, "ratsd", "*logging")
