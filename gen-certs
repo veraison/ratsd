@@ -1,0 +1,207 @@
+#!/bin/bash
+# Copyright 2025 Contributors to the Veraison project.
+# SPDX-License-Identifier: Apache-2.0
+set -e
+
+ROOT_CERT_NAME=rootCA
+DEFAULT_DOMAIN=veraison-net
+DEFAULT_SUFFIX=-ratsd
+
+SERVICE=(ratsd)
+THIS_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+function create_root_cert() {
+	_check_openssl
+	pushd "$THIS_DIR" > /dev/null || exit 1
+
+	openssl ecparam -name prime256v1 -genkey -noout -out ${ROOT_CERT_NAME}.key
+	openssl req -x509 -new -nodes -key ${ROOT_CERT_NAME}.key -sha256 -days 3650 \
+		-subj "/O=Veraison" -out ${ROOT_CERT_NAME}.crt
+
+	echo "Created ${THIS_DIR}/${ROOT_CERT_NAME}.crt"
+
+	popd > /dev/null || exit 1
+}
+
+function create_service_cert() {
+	_check_openssl
+	_check_root_cert
+	pushd "$THIS_DIR" > /dev/null || exit 1
+
+	local suffix=$1
+	local domain=$2
+	local force=$3
+	local san
+
+	san=$(printf "subjectAltName = DNS:%s%s.%s,DNS:%s%s,DNS:localhost" \
+				"$SERVICE" "$suffix" "$domain" "$SERVICE" "$suffix")
+
+	if [[ -f "$SERVICE.crt" || -f "$SERVICE.key" ]]; then
+		if [[ $force == false ]]; then
+			echo "ERROR: artefact(s) for $SERVICE already exit(s); use -f to overwrite"
+			exit 1
+		fi
+	fi
+
+	openssl ecparam -name prime256v1 -genkey -noout -out "$SERVICE.key"
+	openssl req -new -key "$SERVICE.key" -out "$SERVICE.csr" \
+		-subj "/CN=$SERVICE${suffix}.${domain}"
+	openssl x509 -req -in "$SERVICE.csr" -CA rootCA.crt -CAkey ${ROOT_CERT_NAME}.key \
+		-CAcreateserial -out "$SERVICE.crt" -days 3650 -sha256 \
+		-extfile <(echo "$san")
+
+	echo "Created ${THIS_DIR}/$SERVICE.crt"
+
+	popd > /dev/null || exit 1
+}
+
+function create_all() {
+	local suffix=$1
+	local domain=$2
+	local force=$3
+
+	create_service_cert "$suffix" "$domain" "$force"
+}
+
+function clean_intermediate() {
+	pushd "$THIS_DIR" > /dev/null || exit 1
+
+	echo "rm -f -- *.csr *.srl"
+	rm -f -- *.csr *.srl
+
+	popd > /dev/null || exit 1
+}
+
+function clean_cert() {
+	pushd "$THIS_DIR" > /dev/null || exit 1
+
+	local cert="$SERVICE"
+
+	echo "rm -f \"${cert}.crt\" \"${cert}.key\""
+	rm -f "${cert}.crt" "${cert}.key"
+
+	popd > /dev/null || exit 1
+}
+
+function clean_all() {
+	clean_intermediate
+	clean_cert "$service"
+	clean_cert $ROOT_CERT_NAME
+}
+
+function help() {
+	set +e
+	read -r -d '' usage <<-EOF
+	Usage: gen-certs [-h] [-C] [-s SUFFIX] [-d DOMAIN] [COMMAND] [ARGS...]
+
+	This script is used to (re-)generate certificates used for a veraison
+	deployment. The certificates are signed by a CA certificate called
+	${ROOT_CERT_NAME}.crt. If this does not exists, a self-signed one will
+	be generated.
+
+	The script assumes that services will be running on hosts whose names
+	follow the pattern
+
+	         <SERVICE><SUFFIX>.<DOMAIN>
+
+	<SUFFIX> can be specifed using -s option (defaults to "-service"), and
+	<DOMAIN> can be specified using -d option (defaults to "ratsd-net").
+
+	Commands:
+
+	create
+	        Create cert for ratsd.
+
+	root
+	        Create root CA certificate that will be used to sign service certs.
+	        (note: if not already created, this will be automatically created by
+	        "create" command).
+
+	clean
+	        Clean output artifacts for the ratsd.
+
+	clean_all
+	        Clean both intermediate and output artifacts for everything (including
+	        the root CA cert).
+
+	help
+	        Print this message and exit (same as -h option).
+
+	Options:
+
+	-h         Print this message and exit.
+	-C         Do not clean up intermediate artefacts (e.g., CSRs).
+	-s SUFFIX  Specify the suffix to be used for service Common Name/SAN inside the
+	           certs. Defaults to "-service".
+	-d DOMAIN  Specify the domain to be used for the Common Name/SAN inside the certs.
+	           Defaults to "veraison-net".
+
+	        e.g. with default domain and suffix, "vts" will have the
+	        common name/SAN "vts-service.veraison-net"
+	        (note: SAN is the Subject Alternative Name x509 extension)
+
+	EOF
+
+	echo "$usage"
+}
+
+function _check_openssl() {
+	if [[ "$(which openssl 2>/dev/null)" == "" ]]; then
+		echo -e "ERROR: openssl executable must be installed to use this command."
+		exit 1
+	fi
+}
+
+function _check_root_cert() {
+	if [[ ! -f "${THIS_DIR}/${ROOT_CERT_NAME}.crt" ]]; then
+		create_root_cert
+	fi
+}
+
+_should_clean_intermediate=true
+_force=false
+_suffix=$DEFAULT_SUFFIX
+_domain=$DEFAULT_DOMAIN
+
+OPTIND=1
+
+while getopts "hCfd:s:" opt; do
+	case "$opt" in
+		h) help; exit 0;;
+		C) _should_clean_intermediate=false;;
+		f) _force=true;;
+		s) _suffix=$OPTARG;;
+		d) _domain=$OPTARG;;
+		*) break;;
+	esac
+done
+
+shift $((OPTIND-1))
+[ "${1:-}" = "--" ] && shift
+
+command=$1
+case $command in
+	help)
+		help
+		exit 0
+		;;
+	clean)
+		clean_intermediate
+		clean_cert "$service"
+		;;
+	clean-all)
+		clean_all
+		;;
+	create )
+		create_all "$_suffix" "$_domain" "$_force"
+		if [[ $_should_clean_intermediate == true ]]; then
+			clean_intermediate
+		fi
+		;;
+	root)
+		create_root_cert
+		;;
+	*)
+		echo -e "ERROR: unexpected command: \"$command\" (use -h for help)"
+		;;
+esac
