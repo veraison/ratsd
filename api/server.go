@@ -67,5 +67,5 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	s.logger.Info("request media type: ", *(param.Accept))
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("hello, rastd!"))
+	w.Write([]byte("hello from ratsd!"))
 }
