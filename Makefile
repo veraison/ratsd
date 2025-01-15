@@ -5,7 +5,11 @@
 BIN := ratsd
 
 .PHONY: all
-all: build
+all: generate build
+
+.PHONY: generate
+generate:
+	go generate ./api
 
 .PHONY: build
 build:
