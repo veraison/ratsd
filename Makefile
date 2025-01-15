@@ -17,7 +17,7 @@ generate:
 
 .PHONY: build
 build:
-	go build -o $(BIN) ./cmd
+	go build -o $(BIN) -buildmode=pie ./cmd
 
 .PHONY: clean
 clean:
