@@ -7,6 +7,10 @@ BIN := ratsd
 .PHONY: all
 all: generate build
 
+.PHONY: gen-certs
+gen-certs:
+	./gen-certs create
+
 .PHONY: generate
 generate:
 	go generate ./api
@@ -18,3 +22,7 @@ build:
 .PHONY: clean
 clean:
 	rm -f $(BIN) 
+
+.PHONY: clean-certs
+clean-certs:
+	./gen-certs clean
