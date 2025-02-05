@@ -1,0 +1,51 @@
+// Copyright 2025 Contributors to the Veraison project.
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package compositor;
+
+option go_package = "github.com/veraison/ratsd/proto/compositor";
+
+service Compositor {
+  rpc GetSubAttesterID(google.protobuf.Empty) returns (SubAttesterIDOut);
+  rpc GetSupportedFormats(google.protobuf.Empty) returns (SupportedFormatsOut);
+  rpc GetEvidence(EvidenceIn) returns (EvidenceOut);
+}
+
+message Status {
+  bool result = 1;
+  string error = 2;
+}
+
+message SubAttesterID {
+  string name = 1;
+  string version = 2;
+}
+
+message SubAttesterIDOut {
+  Status status = 1;
+  SubAttesterID subAttesterID = 2;
+}
+
+message Format {
+  string contentType = 1;
+  uint32 nonceSize = 2;
+}
+
+message SupportedFormatsOut {
+  Status status = 1;
+  repeated Format formats = 2;
+}
+
+message EvidenceIn {
+  string contentType = 1;
+  bytes  nonce = 2;
+}
+
+message EvidenceOut {
+  Status status = 1;
+  bytes evidence = 2;
+}

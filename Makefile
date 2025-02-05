@@ -13,7 +13,7 @@ gen-certs:
 
 .PHONY: generate
 generate:
-	go generate ./api
+	go generate ./...
 
 .PHONY: build
 build:
