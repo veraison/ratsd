@@ -1,3 +1,5 @@
+// Copyright 2025 Contributors to the Veraison project.
+// SPDX-License-Identifier: Apache-2.0
 package api
 
 import (
@@ -6,6 +8,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/moogar0880/problems"
 	"go.uber.org/zap"
 )
 
@@ -24,17 +27,11 @@ func NewServer(logger *zap.SugaredLogger) *Server {
 	}
 }
 
-func (s *Server) returnBadRequest(w http.ResponseWriter, r *http.Request, errMsg string) {
-	s.logger.Error(errMsg)
-	badRequestError := &BadRequestError{
-		Detail: &errMsg,
-		Status: N400,
-		Title:  InvalidRequest,
-		Type:   TagGithubCom2024VeraisonratsdErrorInvalidrequest,
-	}
-	w.WriteHeader(http.StatusBadRequest)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(badRequestError)
+func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProblem) {
+	s.logger.Error(prob.Detail)
+	w.Header().Set("Content-Type", problems.ProblemMediaType)
+	w.WriteHeader(prob.ProblemStatus())
+	json.NewEncoder(w).Encode(prob)
 }
 
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
@@ -44,15 +41,21 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	ct := r.Header.Get("Content-Type")
 	if ct != ApplicationvndVeraisonCharesJson {
 		errMsg := fmt.Sprintf("wrong content type, expect %s (got %s)", ApplicationvndVeraisonCharesJson, ct)
-		s.returnBadRequest(w, r, errMsg)
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
 		return
 	}
 
 	respCt := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	if *(param.Accept) != respCt {
 		errMsg := fmt.Sprintf("wrong accept type, expect %s (got %s)", respCt, *(param.Accept))
-		w.WriteHeader(http.StatusNotAcceptable)
-		w.Write([]byte(errMsg))
+		p := problems.NewDetailedProblem(http.StatusNotAcceptable, errMsg)
+		s.reportProblem(w, p)
 		return
 	}
 
@@ -60,7 +63,13 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	err := json.Unmarshal(payload, &requestData)
 	if err != nil || len(requestData.Nonce) < 1 {
 		errMsg := "fail to retrieve nonce from the request"
-		s.returnBadRequest(w, r, errMsg)
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
 		return
 	}
 
