@@ -52,11 +52,15 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	}
 
 	respCt := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
-	if *(param.Accept) != respCt {
-		errMsg := fmt.Sprintf("wrong accept type, expect %s (got %s)", respCt, *(param.Accept))
-		p := problems.NewDetailedProblem(http.StatusNotAcceptable, errMsg)
-		s.reportProblem(w, p)
-		return
+	if param.Accept != nil {
+		s.logger.Info("request media type: ", *(param.Accept))
+		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
+			errMsg := fmt.Sprintf(
+				"wrong accept type, expect %s (got %s)", respCt, *(param.Accept))
+			p := problems.NewDetailedProblem(http.StatusNotAcceptable, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
 	}
 
 	payload, _ := io.ReadAll(r.Body)
@@ -74,7 +78,6 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	}
 
 	s.logger.Info("request nonce: ", requestData.Nonce)
-	s.logger.Info("request media type: ", *(param.Accept))
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("hello from ratsd!"))
