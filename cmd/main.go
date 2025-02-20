@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/veraison/ratsd/api"
+	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/services/config"
 	"github.com/veraison/services/log"
 )
@@ -20,6 +21,7 @@ type cfg struct {
 	Protocol   string `mapstructure:"protocol" valid:"in(http|https)"`
 	Cert       string `mapstructure:"cert" config:"zerodefault"`
 	CertKey    string `mapstructure:"cert-key" config:"zerodefault"`
+	PluginDir  string `mapstructure:"plugin-dir" config:"zerodefault"`
 }
 
 func (o cfg) Validate() error {
@@ -59,6 +61,23 @@ func main() {
 	if err = loader.LoadFromViper(subs["ratsd"]); err != nil {
 		log.Fatalf("Could not load config: %v", err)
 	}
+
+	// Load sub-attesters from the path specified in config.yaml
+	pluginLoader, err := plugin.CreateGoPluginLoader(
+		cfg.PluginDir, log.Named("plugin"))
+
+	if err != nil {
+		log.Fatalf("could not create plugin loader: %v", err)
+	}
+
+	pluginManager, err := plugin.CreateGoPluginManagerWithLoader(
+		pluginLoader, log.Named("builtin"))
+
+	if err != nil {
+		log.Fatalf("could not create attester PluginManagerWithLoader: %v", err)
+	}
+
+	log.Info("Loaded sub-attesters:", pluginManager.GetPluginList())
 
 	svr := api.NewServer(log.Named("api"))
 	r := http.NewServeMux()
