@@ -10,13 +10,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/moogar0880/problems"
 	"github.com/stretchr/testify/assert"
+	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/services/log"
 )
 
 const (
-	jsonType = "application/json"
+	jsonType   = "application/json"
+	validNonce = "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHg="
 )
 
 func TestRatsdChares_missing_auth_header(t *testing.T) {
@@ -129,15 +132,24 @@ func TestRatsdChares_missing_nonce(t *testing.T) {
 	assert.Equal(t, expectedBody, &body)
 }
 
-func TestRatsdChares_valid_request(t *testing.T) {
+func TestRatsdChares_valid_request_no_available_attester(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	var params RatsdCharesParams
 
 	param := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	params.Accept = &param
 	logger := log.Named("test")
-	s := &Server{logger: logger}
+
+	pluginList := []string{}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList)
+
+	s := NewServer(logger, dm)
 	w := httptest.NewRecorder()
-	rb := strings.NewReader("{\"nonce\": \"MIDBNH28iioisjPy\"}")
+	rs := fmt.Sprintf("{\"nonce\": \"%s\"}", validNonce)
+	rb := strings.NewReader(rs)
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
 	r.Header.Add("Authorization", ExpectedAuth)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
@@ -145,9 +157,14 @@ func TestRatsdChares_valid_request(t *testing.T) {
 
 	expectedCode := http.StatusOK
 	expectedType := param
-	expectedBody := "hello from ratsd!"
 
 	assert.Equal(t, expectedCode, w.Code)
 	assert.Equal(t, expectedType, w.Result().Header.Get("Content-Type"))
-	assert.Equal(t, expectedBody, w.Body.String())
+
+	var out map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &out)
+	assert.Equal(t, string(TagGithubCom2024Veraisonratsd), out["eat_profile"])
+	assert.Equal(t, validNonce, out["eat_nonce"])
+	assert.Contains(t, out, "cmw")
+	assert.Empty(t, out["cmw"])
 }

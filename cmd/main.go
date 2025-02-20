@@ -79,7 +79,7 @@ func main() {
 
 	log.Info("Loaded sub-attesters:", pluginManager.GetPluginList())
 
-	svr := api.NewServer(log.Named("api"))
+	svr := api.NewServer(log.Named("api"), pluginManager)
 	r := http.NewServeMux()
 	h := api.HandlerFromMux(svr, r)
 
