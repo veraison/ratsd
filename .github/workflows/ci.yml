@@ -33,6 +33,9 @@ jobs:
     - name: Install protoc-gen-go-grpc
       run: go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
+    - name: Install mockgen
+      run: go install github.com/golang/mock/mockgen@v1.6.0
+
     - name: Generate protobufs and ratsd server
       run: go generate ./...
 
