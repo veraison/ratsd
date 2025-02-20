@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package plugin
 
+//go:generate mockgen -destination=../api/mocks/imanager.go -package=mocks github.com/veraison/ratsd/plugin IManager
+
 // IManager defines the interface for managing plugins
 type IManager interface {
 	// Init initializes the manager, and performing plugin discovery.

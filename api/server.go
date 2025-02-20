@@ -3,12 +3,16 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/moogar0880/problems"
+	"github.com/veraison/cmw"
+	"github.com/veraison/ratsd/plugin"
+	"github.com/veraison/ratsd/proto/compositor"
 	"go.uber.org/zap"
 )
 
@@ -18,12 +22,14 @@ const (
 )
 
 type Server struct {
-	logger *zap.SugaredLogger
+	logger  *zap.SugaredLogger
+	manager plugin.IManager
 }
 
-func NewServer(logger *zap.SugaredLogger) *Server {
+func NewServer(logger *zap.SugaredLogger, manager plugin.IManager) *Server {
 	return &Server{
-		logger: logger,
+		logger:  logger,
+		manager: manager,
 	}
 }
 
@@ -51,7 +57,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	respCt := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	respCt := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	if param.Accept != nil {
 		s.logger.Info("request media type: ", *(param.Accept))
 		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
@@ -77,8 +83,81 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
+	nonce, err := base64.RawURLEncoding.DecodeString(requestData.Nonce)
+	if err != nil {
+		errMsg := fmt.Sprintf("fail to decode nonce from the request: %s", err.Error())
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
 	s.logger.Info("request nonce: ", requestData.Nonce)
+	s.logger.Info("request media type: ", *(param.Accept))
+
+	// Use a map until we finalize ratsd output format
+	eat := make(map[string]interface{})
+	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	eat["eat_profile"] = TagGithubCom2024Veraisonratsd
+	eat["eat_nonce"] = requestData.Nonce
+	pl := s.manager.GetPluginList()
+	if len(pl) == 0 {
+		errMsg := "no sub-attester available"
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		s.reportProblem(w, p)
+		return
+	}
+
+	for _, pn := range pl {
+		attester, err := s.manager.LookupByName(pn)
+		if err != nil {
+			errMsg := fmt.Sprintf(
+				"failed to get handle from %s: %s", pn, err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
+
+		formatOut := attester.GetSupportedFormats()
+		if !formatOut.Status.Result || len(formatOut.Formats) == 0 {
+			errMsg := fmt.Sprintf("no supported formats from attester %s: %s ",
+				pn, formatOut.Status.Error)
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			continue
+		}
+
+		s.logger.Info("output content type: ", formatOut.Formats[0].ContentType)
+		in := &compositor.EvidenceIn{
+			ContentType: formatOut.Formats[0].ContentType,
+			Nonce:       nonce,
+		}
+
+		out := attester.GetEvidence(in)
+		if !out.Status.Result {
+			errMsg := fmt.Sprintf(
+				"failed to get attestation report from %s: %s ", pn, out.Status.Error)
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
+
+		c := cmw.NewMonad(in.ContentType, out.Evidence)
+		collection.AddCollectionItem(pn, c)
+	}
+
+	serialized, err := collection.MarshalJSON()
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		s.reportProblem(w, p)
+		return
+	}
+	eat["cmw"] = serialized
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("hello from ratsd!"))
+	json.NewEncoder(w).Encode(eat)
 }
