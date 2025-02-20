@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package plugin
 
+//go:generate mockgen -destination=../api/mocks/ipluggable.go -package=mocks github.com/veraison/ratsd/plugin IPluggable
 import (
 	"github.com/veraison/ratsd/proto/compositor"
 )

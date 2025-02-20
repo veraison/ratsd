@@ -3,13 +3,15 @@ module github.com/veraison/ratsd
 go 1.24.1
 
 require (
-	github.com/fxamacker/cbor/v2 v2.5.0
+	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/getkin/kin-openapi v0.128.0
+	github.com/golang/mock v1.6.0
 	github.com/google/go-configfs-tsm v0.3.2
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/moogar0880/problems v0.1.1
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/stretchr/testify v1.9.0
+	github.com/veraison/cmw v0.1.2-0.20250109140511-d907dcce0c61
 	github.com/veraison/services v0.0.2501
 	go.uber.org/zap v1.23.0
 	google.golang.org/grpc v1.64.0
