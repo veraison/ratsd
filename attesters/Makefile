@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 SUBDIR := tsm
+SUBDIR += mocktsm
 
 clean: ; $(RM) -rf ./bin
 
