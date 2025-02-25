@@ -1,6 +1,6 @@
 // Copyright 2025 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
-package main
+package tsm
 
 import (
 	"encoding/base64"
@@ -12,7 +12,6 @@ import (
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/veraison/cmw"
 	"github.com/veraison/ratsd/api"
-	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
 )
 
@@ -128,9 +127,4 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 
 	errMsg := fmt.Errorf("no supported format in tsm plugin matches the requested format")
 	return getEvidenceError(errMsg)
-}
-
-func main() {
-	plugin.RegisterImplementation(&TSMPlugin{})
-	plugin.Serve()
 }

@@ -5,7 +5,7 @@
 BIN := ratsd
 
 .PHONY: all
-all: generate build test
+all: generate build-all
 
 .PHONY: gen-certs
 gen-certs:
@@ -15,15 +15,25 @@ gen-certs:
 generate:
 	go generate ./...
 
-.PHONY: build
+.PHONY: build-all build
+build-all: build-attesters build
+
+build-attesters:
+	make -C attesters/
+
 build:
 	go build -o $(BIN) -buildmode=pie ./cmd
 
 .PHONY: test
 test:
-	go test -v github.com/veraison/ratsd/api
+	go test -v --cover --race ./...
 
-.PHONY: clean
+.PHONY: clean-all clean
+clean-all: clean-attesters clean
+
+clean-attesters:
+	make -C attesters/ clean
+
 clean:
 	rm -f $(BIN) 
 
