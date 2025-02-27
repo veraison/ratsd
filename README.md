@@ -22,7 +22,7 @@ sudo apt-get -y install protoc-gen-go-grpc
 
 Building is started using `make` and will also run various tests. After successful compilation the binary `ratsd` should be present, for example:
 
-```bash
+```console
 $ make
 go generate ./...
 go build -o ratsd -buildmode=pie ./cmd
