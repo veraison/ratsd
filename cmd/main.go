@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/veraison/ratsd/api"
+	"github.com/veraison/ratsd/auth"
 	"github.com/veraison/services/config"
 	"github.com/veraison/services/log"
 )
@@ -43,7 +44,7 @@ func main() {
 		Protocol:   "https",
 	}
 
-	subs, err := config.GetSubs(v, "ratsd", "*logging")
+	subs, err := config.GetSubs(v, "ratsd", "*logging", "*auth")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,6 +53,17 @@ func main() {
 	if err := log.Init(subs["logging"], classifiers); err != nil {
 		log.Fatalf("could not configure logging: %v", err)
 	}
+
+	authorizer, err := auth.NewAuthorizer(subs["auth"], log.Named("auth"))
+	if err != nil {
+		log.Fatalf("could not init authorizer: %v", err)
+	}
+	defer func() {
+		err := authorizer.Close()
+		if err != nil {
+			log.Errorf("Could not close authorizer: %v", err)
+		}
+	}()
 
 	log.Infow("Initializing ratsd core")
 
@@ -62,7 +74,11 @@ func main() {
 
 	svr := api.NewServer(log.Named("api"))
 	r := http.NewServeMux()
-	h := api.HandlerFromMux(svr, r)
+	options := api.StdHTTPServerOptions{
+		BaseRouter:  r,
+		Middlewares: []api.MiddlewareFunc{authorizer.GetMiddleware},
+	}
+	h := api.HandlerWithOptions(svr, options)
 
 	s := &http.Server{
 		Handler: h,
