@@ -3,3 +3,4 @@ logging:
 ratsd:
   listen-addr: 0.0.0.0:8895
   protocol: http
+  plugin-dir: attesters/bin
