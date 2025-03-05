@@ -15,6 +15,7 @@ service Compositor {
   rpc GetEvidence(EvidenceIn) returns (EvidenceOut);
 }
 
+// Status.result = true on sucess, status.result = false on failure.
 message Status {
   bool result = 1;
   string error = 2;
