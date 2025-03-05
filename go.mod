@@ -3,6 +3,7 @@ module github.com/veraison/ratsd
 go 1.24.1
 
 require (
+	github.com/fxamacker/cbor/v2 v2.5.0
 	github.com/getkin/kin-openapi v0.128.0
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/moogar0880/problems v0.1.1
@@ -69,6 +70,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.7.0 // indirect
