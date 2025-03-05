@@ -3,11 +3,15 @@ module github.com/veraison/ratsd
 go 1.22.7
 
 require (
+	github.com/fxamacker/cbor/v2 v2.5.0
 	github.com/getkin/kin-openapi v0.128.0
+	github.com/golang/mock v1.6.0
+	github.com/google/go-configfs-tsm v0.3.2
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/moogar0880/problems v0.1.1
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/stretchr/testify v1.9.0
+	github.com/veraison/cmw v0.1.0
 	github.com/veraison/services v0.0.2501
 	go.uber.org/zap v1.23.0
 	google.golang.org/grpc v1.64.0
@@ -69,6 +73,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.7.0 // indirect
