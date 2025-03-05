@@ -22,6 +22,7 @@ build:
 .PHONY: test
 test:
 	go test -v github.com/veraison/ratsd/api
+	go test -v github.com/veraison/ratsd/tokens
 
 .PHONY: clean
 clean:
