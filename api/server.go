@@ -15,7 +15,6 @@ import (
 // Defines missing consts in the API Spec
 const (
 	ApplicationvndVeraisonCharesJson string = "application/vnd.veraison.chares+json"
-	ExpectedAuth                     string = "Bearer my.jwt.token"
 )
 
 type Server struct {
@@ -37,18 +36,6 @@ func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProb
 
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
 	var requestData ChaResRequest
-
-	auth := r.Header.Get("Authorization")
-	if auth != ExpectedAuth {
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorUnauthorized),
-			Title:  string(AccessUnauthorized),
-			Detail: "wrong or missing authorization header",
-			Status: http.StatusUnauthorized,
-		}
-		s.reportProblem(w, p)
-		return
-	}
 
 	// Check if content type matches the expectation
 	ct := r.Header.Get("Content-Type")
