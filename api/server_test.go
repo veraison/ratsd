@@ -19,31 +19,6 @@ const (
 	jsonType = "application/json"
 )
 
-func TestRatsdChares_missing_auth_header(t *testing.T) {
-	expectedCode := http.StatusUnauthorized
-	expectedType := problems.ProblemMediaType
-	expectedBody := &problems.DefaultProblem{
-		Type:   string(TagGithubCom2024VeraisonratsdErrorUnauthorized),
-		Title:  string(AccessUnauthorized),
-		Status: http.StatusUnauthorized,
-		Detail: "wrong or missing authorization header",
-	}
-
-	var params RatsdCharesParams
-	logger := log.Named("test")
-	s := &Server{logger: logger}
-	w := httptest.NewRecorder()
-	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", http.NoBody)
-	s.RatsdChares(w, r, params)
-
-	var body problems.DefaultProblem
-	_ = json.Unmarshal(w.Body.Bytes(), &body)
-
-	assert.Equal(t, expectedCode, w.Code)
-	assert.Equal(t, expectedType, w.Result().Header.Get("Content-Type"))
-	assert.Equal(t, expectedBody, &body)
-}
-
 func TestRatsdChares_wrong_content_type(t *testing.T) {
 	expectedCode := http.StatusBadRequest
 	expectedType := problems.ProblemMediaType
@@ -59,7 +34,6 @@ func TestRatsdChares_wrong_content_type(t *testing.T) {
 	s := &Server{logger: logger}
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", http.NoBody)
-	r.Header.Add("Authorization", ExpectedAuth)
 	r.Header.Add("Content-Type", jsonType)
 	s.RatsdChares(w, r, params)
 
@@ -80,7 +54,6 @@ func TestRatsdChares_wrong_accept_type(t *testing.T) {
 	s := &Server{logger: logger}
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", http.NoBody)
-	r.Header.Add("Authorization", ExpectedAuth)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
 	s.RatsdChares(w, r, params)
 
@@ -108,7 +81,6 @@ func TestRatsdChares_missing_nonce(t *testing.T) {
 	w := httptest.NewRecorder()
 	rb := strings.NewReader("{\"noncee\": \"MIDBNH28iioisjPy\"}")
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
-	r.Header.Add("Authorization", ExpectedAuth)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
 	s.RatsdChares(w, r, params)
 
@@ -139,7 +111,6 @@ func TestRatsdChares_valid_request(t *testing.T) {
 	w := httptest.NewRecorder()
 	rb := strings.NewReader("{\"nonce\": \"MIDBNH28iioisjPy\"}")
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
-	r.Header.Add("Authorization", ExpectedAuth)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
 	s.RatsdChares(w, r, params)
 
