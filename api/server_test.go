@@ -18,6 +18,7 @@ import (
 	"github.com/veraison/cmw"
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
+	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
 
@@ -191,16 +192,13 @@ func TestRatsdChares_valid_request(t *testing.T) {
 	assert.Equal(t, cmw.KindMonad, c.GetKind())
 	assert.Equal(t, c.GetMonadType(), "application/vnd.veraison.configfs-tsm+json")
 
-	var tsmout map[string]string
-	json.Unmarshal(c.GetMonadValue(), &tsmout)
-	assert.Equal(t, "fake\n", tsmout["provider"])
+	tsmout := &tokens.TSMReport{}
+	tsmout.FromJSON(c.GetMonadValue())
+	assert.Equal(t, "fake\n", tsmout.Provider)
 
-	auxblob, err := base64.RawURLEncoding.DecodeString(tsmout["auxblob"])
-	assert.Equal(t, []byte("auxblob"), auxblob)
+	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
-	outblob, err := base64.RawURLEncoding.DecodeString(tsmout["outblob"])
-	assert.NoError(t, err)
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
 	expectedOutblob := fmt.Sprintf("privlevel: 0\ninblob: %s", hex.EncodeToString([]byte(realNonce)))
-	assert.Equal(t, []byte(expectedOutblob), outblob)
+	assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 }

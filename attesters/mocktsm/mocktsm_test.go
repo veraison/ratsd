@@ -3,14 +3,13 @@
 package mocktsm
 
 import (
-	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/veraison/ratsd/proto/compositor"
+	"github.com/veraison/ratsd/tokens"
 )
 
 const (
@@ -83,13 +82,13 @@ func Test_GetEvidence(t *testing.T) {
 	}
 
 	expectedOutblob := fmt.Sprintf("privlevel: 0\ninblob: %s", hex.EncodeToString(inblob))
-	out := map[string]string{
-		"provider": "fake\n",
-		"outblob":  base64.RawURLEncoding.EncodeToString([]byte(expectedOutblob)),
-		"auxblob":  base64.RawURLEncoding.EncodeToString([]byte("auxblob")),
+	out := &tokens.TSMReport{
+		Provider: "fake\n",
+		OutBlob:  []byte(expectedOutblob),
+		AuxBlob:  []byte("auxblob"),
 	}
 
-	outEncoded, _ := json.Marshal(out)
+	outEncoded, _ := out.ToJSON()
 
 	expected := &compositor.EvidenceOut{
 		Status:   statusSucceeded,

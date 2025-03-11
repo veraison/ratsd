@@ -3,14 +3,13 @@
 package mocktsm
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/go-configfs-tsm/configfs/configfsi"
 	"github.com/google/go-configfs-tsm/configfs/faketsm"
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/veraison/ratsd/proto/compositor"
+	"github.com/veraison/ratsd/tokens"
 )
 
 const (
@@ -84,13 +83,13 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 		return getEvidenceError(errMsg)
 	}
 
-	out := map[string]string{
-		"provider": resp.Provider,
-		"outblob":  base64.RawURLEncoding.EncodeToString(resp.OutBlob),
-		"auxblob":  base64.RawURLEncoding.EncodeToString(resp.AuxBlob),
+	out := &tokens.TSMReport{
+		Provider: resp.Provider,
+		OutBlob:  resp.OutBlob,
+		AuxBlob:  resp.AuxBlob,
 	}
 
-	outEncoded, err := json.Marshal(out)
+	outEncoded, err := out.ToJSON()
 	if err != nil {
 		errMsg := fmt.Errorf("failed to JSON encode mock TSM report: %v", err)
 		return getEvidenceError(errMsg)
