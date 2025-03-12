@@ -86,10 +86,15 @@ components:
       type: object
       required:
         - nonce
+        - attester-selection
       properties:
         nonce:
           type: string
           format: base64url
+        attester-selection:
+          type: string
+          format: json
+          x-omitempty: true
     EAT:
       type: object
       required:
