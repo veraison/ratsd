@@ -3,7 +3,9 @@
 package mocktsm
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/google/go-configfs-tsm/configfs/configfsi"
 	"github.com/google/go-configfs-tsm/configfs/faketsm"
@@ -75,6 +77,25 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 	req := &report.Request{
 		InBlob:     in.Nonce,
 		GetAuxBlob: true,
+	}
+
+	options := make(map[string]string)
+	if len(in.Options) > 0 {
+		if err := json.Unmarshal(in.Options, &options); err != nil {
+			errMsg := fmt.Errorf(
+				"failed to parse %s: %v", in.Options, err)
+			return getEvidenceError(errMsg)
+		}
+	}
+
+	if privlevel, ok := options["privilege_level"]; ok {
+		level, err := strconv.Atoi(privlevel)
+		if err != nil || level < 0 {
+			errMsg := fmt.Errorf("privilege_level %s is invalid",
+			privlevel)
+			return getEvidenceError(errMsg)
+		}
+		req.Privilege = &report.Privilege{Level: uint(level)}
 	}
 
 	resp, err := report.Get(m.client, req)
