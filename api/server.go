@@ -111,6 +111,24 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
+	var options map[string]json.RawMessage
+	if len(requestData.AttesterSelection) > 0 {
+		err := json.Unmarshal(requestData.AttesterSelection, &options)
+		if err != nil {
+			errMsg := fmt.Sprintf(
+				"failed to parse attester selection: %s", err.Error())
+			p := &problems.DefaultProblem{
+				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+				Title:  string(InvalidRequest),
+				Detail: errMsg,
+				Status: http.StatusBadRequest,
+			}
+			s.reportProblem(w, p)
+			fmt.Println(errMsg)
+			return
+		}
+	}
+
 	for _, pn := range pl {
 		attester, err := s.manager.LookupByName(pn)
 		if err != nil {
@@ -130,10 +148,16 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			continue
 		}
 
+		params, hasOption := options[pn]
+		if !hasOption {
+			params = json.RawMessage{}
+		}
+
 		s.logger.Info("output content type: ", formatOut.Formats[0].ContentType)
 		in := &compositor.EvidenceIn{
 			ContentType: formatOut.Formats[0].ContentType,
 			Nonce:       nonce,
+			Options:     params,
 		}
 
 		out := attester.GetEvidence(in)
