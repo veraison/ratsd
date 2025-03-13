@@ -16,11 +16,11 @@ type IPluggable interface {
 	GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut
 
 	// GetSubAttesterID returns a *compositor.SubAttesterIDOut that contains
-	// the name and the version of the subattesters in field SubAttesterID 
+	// the name and the version of the subattesters in field SubAttesterID
 	GetSubAttesterID() *compositor.SubAttesterIDOut
 
 	// GetSupportedFormats returns a *compositor.SupportedFormatsOut that contains
 	// a list of the output content type and the input nonce sizes supported by this
-	// sub-attester, accessible in field Formats 
+	// sub-attester, accessible in field Formats
 	GetSupportedFormats() *compositor.SupportedFormatsOut
 }
