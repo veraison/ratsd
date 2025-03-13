@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/veraison/ratsd/api"
-	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/auth"
+	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/services/config"
 	"github.com/veraison/services/log"
 )
