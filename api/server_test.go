@@ -10,13 +10,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/moogar0880/problems"
 	"github.com/stretchr/testify/assert"
+	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/services/log"
 )
 
 const (
-	jsonType = "application/json"
+	jsonType   = "application/json"
+	validNonce = "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHg"
 )
 
 func TestRatsdChares_wrong_content_type(t *testing.T) {
@@ -57,7 +60,7 @@ func TestRatsdChares_wrong_accept_type(t *testing.T) {
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
 	s.RatsdChares(w, r, params)
 
-	respCt := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	respCt := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	expectedCode := http.StatusNotAcceptable
 	expectedType := problems.ProblemMediaType
 	expectedDetail := fmt.Sprintf("wrong accept type, expect %s (got %s)", respCt, *(params.Accept))
@@ -74,7 +77,7 @@ func TestRatsdChares_wrong_accept_type(t *testing.T) {
 func TestRatsdChares_missing_nonce(t *testing.T) {
 	var params RatsdCharesParams
 
-	param := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	param := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	params.Accept = &param
 	logger := log.Named("test")
 	s := &Server{logger: logger}
@@ -101,24 +104,37 @@ func TestRatsdChares_missing_nonce(t *testing.T) {
 	assert.Equal(t, expectedBody, &body)
 }
 
-func TestRatsdChares_valid_request(t *testing.T) {
+func TestRatsdChares_valid_request_no_available_attester(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	var params RatsdCharesParams
 
-	param := fmt.Sprintf(`application/eat+jwt; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	param := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	params.Accept = &param
 	logger := log.Named("test")
-	s := &Server{logger: logger}
+
+	pluginList := []string{}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList)
+
+	s := NewServer(logger, dm)
 	w := httptest.NewRecorder()
-	rb := strings.NewReader("{\"nonce\": \"MIDBNH28iioisjPy\"}")
+	rs := fmt.Sprintf("{\"nonce\": \"%s\"}", validNonce)
+	rb := strings.NewReader(rs)
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
 	s.RatsdChares(w, r, params)
 
-	expectedCode := http.StatusOK
-	expectedType := param
-	expectedBody := "hello from ratsd!"
+	expectedCode := http.StatusInternalServerError
+	expectedType := problems.ProblemMediaType
+	expectedDetail := "no sub-attester available"
+	expectedBody := problems.NewDetailedProblem(http.StatusInternalServerError, expectedDetail)
+
+	var body problems.DefaultProblem
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
 
 	assert.Equal(t, expectedCode, w.Code)
 	assert.Equal(t, expectedType, w.Result().Header.Get("Content-Type"))
-	assert.Equal(t, expectedBody, w.Body.String())
+	assert.Equal(t, expectedBody, &body)
 }
