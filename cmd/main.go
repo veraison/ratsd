@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/veraison/ratsd/api"
-	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/auth"
+	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/services/config"
 	"github.com/veraison/services/log"
 )
@@ -84,7 +84,7 @@ func main() {
 
 	log.Info("Loaded sub-attesters:", pluginManager.GetPluginList())
 
-	svr := api.NewServer(log.Named("api"))
+	svr := api.NewServer(log.Named("api"), pluginManager)
 	r := http.NewServeMux()
 	options := api.StdHTTPServerOptions{
 		BaseRouter:  r,

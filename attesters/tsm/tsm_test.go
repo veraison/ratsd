@@ -14,7 +14,7 @@ import (
 func Test_getEvidenceError(t *testing.T) {
 	e := fmt.Errorf("sample error")
 
-	expected := &compositor.EvidenceOut {
+	expected := &compositor.EvidenceOut{
 		Status: &compositor.Status{
 			Result: false, Error: "sample error",
 		},
@@ -26,7 +26,7 @@ func Test_getEvidenceError(t *testing.T) {
 func Test_GetSubAttesterID(t *testing.T) {
 	p := &TSMPlugin{}
 
-	expected := &compositor.SubAttesterIDOut {
+	expected := &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,
 		Status:        statusSucceeded,
 	}
@@ -34,16 +34,15 @@ func Test_GetSubAttesterID(t *testing.T) {
 	assert.Equal(t, expected, p.GetSubAttesterID())
 }
 
-
 func Test_GetSupportedFormats(t *testing.T) {
 	p := &TSMPlugin{}
 	var expected *compositor.SupportedFormatsOut
 
 	if _, err := linuxtsm.MakeClient(); err != nil {
-		expected = &compositor.SupportedFormatsOut {
-			Status:  &compositor.Status{
+		expected = &compositor.SupportedFormatsOut{
+			Status: &compositor.Status{
 				Result: false,
-				Error: fmt.Sprintf("TSM is not available: %s", err.Error()),
+				Error:  fmt.Sprintf("TSM is not available: %s", err.Error()),
 			},
 		}
 	} else {
