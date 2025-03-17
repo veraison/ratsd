@@ -60,6 +60,42 @@ func Test_GetSupportedFormats(t *testing.T) {
 	assert.Equal(t, expected, p.GetSupportedFormats())
 }
 
+func Test_GetEvidence_wrong_nonce_size(t *testing.T) {
+	inblob := []byte("abcdefghijklmnopqrstuvwxyz123456")
+	in := &compositor.EvidenceIn{
+		ContentType: ApplicationvndVeraisonConfigfsTsmJson,
+		Nonce:       inblob,
+	}
+
+	errMsg := fmt.Sprintf(
+		"nonce size of the TSM attester should be %d, got %d", tsmNonceSize, len(inblob))
+	expected := &compositor.EvidenceOut{
+		Status: &compositor.Status{
+			Result: false,
+			Error:  errMsg,
+		},
+	}
+
+	assert.Equal(t, expected, p.GetEvidence(in))
+}
+
+func Test_GetEvidence_invalid_format(t *testing.T) {
+	inblob := []byte(validNonceStr)
+	in := &compositor.EvidenceIn{
+		ContentType: string("mediaType"),
+		Nonce:       inblob,
+	}
+
+	expected := &compositor.EvidenceOut{
+		Status: &compositor.Status{
+			Result: false,
+			Error:  "no supported format in tsm plugin matches the requested format",
+		},
+	}
+
+	assert.Equal(t, expected, p.GetEvidence(in))
+}
+
 func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 	tests := []struct{ name, params, msg string }{
 		{"privilege level not integer", `{"privilege_level": "invalid"}`,
