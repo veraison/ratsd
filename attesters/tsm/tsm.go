@@ -80,15 +80,15 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 
 	for _, format := range supportedFormats {
 		if in.ContentType == format.ContentType {
+			req := &report.Request{
+				InBlob:     in.Nonce,
+				GetAuxBlob: true,
+			}
+
 			client, err := linuxtsm.MakeClient()
 			if err != nil {
 				errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
 				return getEvidenceError(errMsg)
-			}
-
-			req := &report.Request{
-				InBlob:     in.Nonce,
-				GetAuxBlob: true,
 			}
 
 			resp, err := report.Get(client, req)
