@@ -3,14 +3,12 @@
 package tsm
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/veraison/ratsd/proto/compositor"
+	"github.com/veraison/ratsd/tokens"
 )
 
 const (
@@ -99,22 +97,23 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				return getEvidenceError(errMsg)
 			}
 
-			out := map[string]string{
-				"provider": resp.Provider,
-				"outblob":  base64.RawURLEncoding.EncodeToString(resp.OutBlob),
-				"auxblob":  base64.RawURLEncoding.EncodeToString(resp.AuxBlob),
+			out := &tokens.TSMReport{
+				Provider: resp.Provider,
+				OutBlob:  resp.OutBlob,
+				AuxBlob:  resp.AuxBlob,
 			}
 
-			var encodeOp func(v any) ([]byte, error)
+			var encodeOp func() ([]byte, error)
 			if in.ContentType == ApplicationvndVeraisonConfigfsTsmCbor {
-				encodeOp = cbor.Marshal
+				encodeOp = out.ToCBOR
 			} else {
-				encodeOp = json.Marshal
+				encodeOp = out.ToJSON
 			}
 
-			outEncoded, err := encodeOp(out)
+			outEncoded, err := encodeOp()
 			if err != nil {
-				return getEvidenceError(err)
+				errMsg := fmt.Errorf("failed to JSON encode mock TSM report: %v", err)
+				return getEvidenceError(errMsg)
 			}
 
 			return &compositor.EvidenceOut{
