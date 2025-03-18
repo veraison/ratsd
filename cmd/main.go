@@ -18,11 +18,12 @@ var (
 )
 
 type cfg struct {
-	ListenAddr string `mapstructure:"listen-addr" valid:"dialstring"`
-	Protocol   string `mapstructure:"protocol" valid:"in(http|https)"`
-	Cert       string `mapstructure:"cert" config:"zerodefault"`
-	CertKey    string `mapstructure:"cert-key" config:"zerodefault"`
-	PluginDir  string `mapstructure:"plugin-dir" config:"zerodefault"`
+	ListenAddr  string `mapstructure:"listen-addr" valid:"dialstring"`
+	Protocol    string `mapstructure:"protocol" valid:"in(http|https)"`
+	Cert        string `mapstructure:"cert" config:"zerodefault"`
+	CertKey     string `mapstructure:"cert-key" config:"zerodefault"`
+	PluginDir   string `mapstructure:"plugin-dir" config:"zerodefault"`
+	ListOptions string `mapstructure:"list-options" valid:"in(all|selected)"`
 }
 
 func (o cfg) Validate() error {
@@ -84,7 +85,7 @@ func main() {
 
 	log.Info("Loaded sub-attesters:", pluginManager.GetPluginList())
 
-	svr := api.NewServer(log.Named("api"), pluginManager)
+	svr := api.NewServer(log.Named("api"), pluginManager, cfg.ListOptions)
 	r := http.NewServeMux()
 	options := api.StdHTTPServerOptions{
 		BaseRouter:  r,

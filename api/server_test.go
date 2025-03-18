@@ -89,12 +89,12 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 	params.Accept = &param
 	logger := log.Named("test")
 
-	pluginList := []string{"mock-tsm"}
+	pluginList := []string{"mock-tsm", "tsm-report"}
 	dm := mock_deps.NewMockIManager(ctrl)
 	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
 	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
 
-	s := NewServer(logger, dm)
+	s := NewServer(logger, dm, "selected")
 	tests := []struct{ name, body, msg string }{
 		{"missing nonce", `{"noncee": "MIDBNH28iioisjPy"}`,
 			"fail to retrieve nonce from the request"},
@@ -103,6 +103,8 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 		"attester-selection": "attester-slection"}`, validNonce),
 			"failed to parse attester selection: json: cannot unmarshal string into" +
 				` Go value of type map[string]json.RawMessage`},
+		{"no attester sepecified in selected mode", fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
+			"attester-selection must contain at least one attester"},
 	}
 
 	for _, tt := range tests {
@@ -146,7 +148,7 @@ func TestRatsdChares_valid_request_no_available_attester(t *testing.T) {
 	dm := mock_deps.NewMockIManager(ctrl)
 	dm.EXPECT().GetPluginList().Return(pluginList)
 
-	s := NewServer(logger, dm)
+	s := NewServer(logger, dm, "all")
 	w := httptest.NewRecorder()
 	rs := fmt.Sprintf(`{"nonce": "%s"}`, validNonce)
 	rb := strings.NewReader(rs)
@@ -182,7 +184,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
 	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
 
-	s := NewServer(logger, dm)
+	s := NewServer(logger, dm, "all")
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
 
 	tests := []struct {
@@ -192,6 +194,15 @@ func TestRatsdChares_valid_request(t *testing.T) {
 		{
 			"no params",
 			fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
+			0,
+		},
+		{
+			"with null as params",
+			fmt.Sprintf(`{"nonce": "%s",
+				"attester-selection":{
+					"mock-tsm": null
+				}
+			}`, validNonce),
 			0,
 		},
 		{
