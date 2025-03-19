@@ -80,8 +80,8 @@ func createPluginContext(
 	}
 
 	blob := handle.GetSubAttesterID()
-	if blob.Status.Result {
-		return nil, fmt.Errorf("failed to retrieve subattestr ID from %s", path)
+	if !blob.Status.Result {
+		return nil, fmt.Errorf("failed to retrieve subattester ID from %s", path)
 	}
 
 	return &PluginContext{
