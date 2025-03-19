@@ -98,11 +98,20 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 	tests := []struct{ name, body, msg string }{
 		{"missing nonce", `{"noncee": "MIDBNH28iioisjPy"}`,
 			"fail to retrieve nonce from the request"},
-		{"invalid attester selecton",
+		{"invalid attester selection",
 			fmt.Sprintf(`{"nonce": "%s",
 		"attester-selection": "attester-slection"}`, validNonce),
 			"failed to parse attester selection: json: cannot unmarshal string into" +
 				` Go value of type map[string]json.RawMessage`},
+		{"invalid attester options",
+			fmt.Sprintf(`{"nonce": "%s",
+			"attester-selection": {"mock-tsm":"invalid"}}`, validNonce),
+			"failed to parse options for mock-tsm: json: cannot unmarshal string into" +
+				` Go value of type map[string]string`},
+		{"request content type unavailable",
+			fmt.Sprintf(`{"nonce": "%s",
+			"attester-selection": {"mock-tsm":{"content-type":"invalid"}}}`, validNonce),
+			"mock-tsm does not support content type invalid"},
 	}
 
 	for _, tt := range tests {
