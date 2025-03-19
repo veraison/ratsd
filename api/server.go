@@ -124,7 +124,6 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 				Status: http.StatusBadRequest,
 			}
 			s.reportProblem(w, p)
-			fmt.Println(errMsg)
 			return
 		}
 	}
@@ -153,7 +152,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			params = json.RawMessage{}
 		}
 
-		s.logger.Info("output content type: ", formatOut.Formats[0].ContentType)
+		s.logger.Info(pn, " output content type: ", formatOut.Formats[0].ContentType)
 		in := &compositor.EvidenceIn{
 			ContentType: formatOut.Formats[0].ContentType,
 			Nonce:       nonce,
