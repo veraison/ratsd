@@ -145,7 +145,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 				pn, formatOut.Status.Error)
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
-			continue
+			return
 		}
 
 		params, hasOption := options[pn]
