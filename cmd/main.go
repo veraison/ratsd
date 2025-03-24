@@ -18,11 +18,12 @@ var (
 )
 
 type cfg struct {
-	ListenAddr string `mapstructure:"listen-addr" valid:"dialstring"`
-	Protocol   string `mapstructure:"protocol" valid:"in(http|https)"`
-	Cert       string `mapstructure:"cert" config:"zerodefault"`
-	CertKey    string `mapstructure:"cert-key" config:"zerodefault"`
-	PluginDir  string `mapstructure:"plugin-dir" config:"zerodefault"`
+	ListenAddr    string `mapstructure:"listen-addr" valid:"dialstring"`
+	Protocol      string `mapstructure:"protocol" valid:"in(http|https)"`
+	Cert          string `mapstructure:"cert" config:"zerodefault"`
+	CertKey       string `mapstructure:"cert-key" config:"zerodefault"`
+	PluginDir     string `mapstructure:"plugin-dir" config:"zerodefault"`
+	SecureLoader  bool   `mapstructure:"secure-loader" config:"zerodefault"`
 }
 
 func (o cfg) Validate() error {
@@ -75,8 +76,22 @@ func main() {
 	}
 
 	// Load sub-attesters from the path specified in config.yaml
-	pluginManager, err := plugin.CreateGoPluginManager(
-		cfg.PluginDir, log.Named("plugin"))
+	pluginLoader, err := plugin.CreateGoPluginLoader(cfg.PluginDir, log.Named("plugin"))
+	if err != nil {
+		log.Fatalf("could not create the plugin loader: %v", err)
+	}
+	if cfg.SecureLoader {
+		subs, err := config.GetSubs(v, "plugins")
+		if err != nil {
+			log.Fatalf("failed to enable secure loader: %v", err)
+		}
+		if err := pluginLoader.SetChecksum(subs["plugins"]); err != nil {
+			log.Fatalf("secure loader failed to set plugin checksum: %v", err)
+		}
+	}
+
+	pluginManager, err := plugin.CreateGoPluginManagerWithLoader(
+		pluginLoader, log.Named("plugin"))
 
 	if err != nil {
 		log.Fatalf("could not create the plugin manager: %v", err)
