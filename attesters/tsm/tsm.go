@@ -125,15 +125,18 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			}
 
 			var encodeOp func() ([]byte, error)
+			encodeAs := "JSON"
+
 			if in.ContentType == ApplicationvndVeraisonConfigfsTsmCbor {
 				encodeOp = out.ToCBOR
+				encodeAs = "CBOR"
 			} else {
 				encodeOp = out.ToJSON
 			}
 
 			outEncoded, err := encodeOp()
 			if err != nil {
-				errMsg := fmt.Errorf("failed to JSON encode mock TSM report: %v", err)
+				errMsg := fmt.Errorf("failed to encode TSM report as %s: %v", encodeAs, err)
 				return getEvidenceError(errMsg)
 			}
 
