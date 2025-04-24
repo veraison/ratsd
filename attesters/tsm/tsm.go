@@ -3,14 +3,14 @@
 package tsm
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/veraison/ratsd/proto/compositor"
+	"github.com/veraison/ratsd/tokens"
 )
 
 const (
@@ -82,15 +82,34 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 
 	for _, format := range supportedFormats {
 		if in.ContentType == format.ContentType {
+			req := &report.Request{
+				InBlob:     in.Nonce,
+				GetAuxBlob: true,
+			}
+
+			options := make(map[string]string)
+			if len(in.Options) > 0 {
+				if err := json.Unmarshal(in.Options, &options); err != nil {
+					errMsg := fmt.Errorf(
+						"failed to parse %s: %v", in.Options, err)
+					return getEvidenceError(errMsg)
+				}
+			}
+
+			if privlevel, ok := options["privilege_level"]; ok {
+				level, err := strconv.Atoi(privlevel)
+				if err != nil || level < 0 {
+					errMsg := fmt.Errorf("privilege_level %s is invalid",
+						privlevel)
+					return getEvidenceError(errMsg)
+				}
+				req.Privilege = &report.Privilege{Level: uint(level)}
+			}
+
 			client, err := linuxtsm.MakeClient()
 			if err != nil {
 				errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
 				return getEvidenceError(errMsg)
-			}
-
-			req := &report.Request{
-				InBlob:     in.Nonce,
-				GetAuxBlob: true,
 			}
 
 			resp, err := report.Get(client, req)
@@ -99,22 +118,26 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				return getEvidenceError(errMsg)
 			}
 
-			out := map[string]string{
-				"provider": resp.Provider,
-				"outblob":  base64.RawURLEncoding.EncodeToString(resp.OutBlob),
-				"auxblob":  base64.RawURLEncoding.EncodeToString(resp.AuxBlob),
+			out := &tokens.TSMReport{
+				Provider: resp.Provider,
+				OutBlob:  resp.OutBlob,
+				AuxBlob:  resp.AuxBlob,
 			}
 
-			var encodeOp func(v any) ([]byte, error)
+			var encodeOp func() ([]byte, error)
+			encodeAs := "JSON"
+
 			if in.ContentType == ApplicationvndVeraisonConfigfsTsmCbor {
-				encodeOp = cbor.Marshal
+				encodeOp = out.ToCBOR
+				encodeAs = "CBOR"
 			} else {
-				encodeOp = json.Marshal
+				encodeOp = out.ToJSON
 			}
 
-			outEncoded, err := encodeOp(out)
+			outEncoded, err := encodeOp()
 			if err != nil {
-				return getEvidenceError(err)
+				errMsg := fmt.Errorf("failed to encode TSM report as %s: %v", encodeAs, err)
+				return getEvidenceError(errMsg)
 			}
 
 			return &compositor.EvidenceOut{
