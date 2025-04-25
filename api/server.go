@@ -46,7 +46,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	// Check if content type matches the expectation
 	ct := r.Header.Get("Content-Type")
 	if ct != ApplicationvndVeraisonCharesJson {
-		errMsg := fmt.Sprintf("wrong content type, expect %s (got %s)", ApplicationvndVeraisonCharesJson, ct)
+		errMsg := fmt.Sprintf("wrong content type, expected %s (got %s)", ApplicationvndVeraisonCharesJson, ct)
 		p := &problems.DefaultProblem{
 			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
 			Title:  string(InvalidRequest),
@@ -62,7 +62,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		s.logger.Info("request media type: ", *(param.Accept))
 		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
 			errMsg := fmt.Sprintf(
-				"wrong accept type, expect %s (got %s)", respCt, *(param.Accept))
+				"wrong accept type, expected %s (got %s)", respCt, *(param.Accept))
 			p := problems.NewDetailedProblem(http.StatusNotAcceptable, errMsg)
 			s.reportProblem(w, p)
 			return
@@ -72,7 +72,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	payload, _ := io.ReadAll(r.Body)
 	err := json.Unmarshal(payload, &requestData)
 	if err != nil || len(requestData.Nonce) < 1 {
-		errMsg := "fail to retrieve nonce from the request"
+		errMsg := fmt.Sprintf("failed to unmarshal nonce from the request: %s", err.Error())
 		p := &problems.DefaultProblem{
 			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
 			Title:  string(InvalidRequest),
@@ -85,7 +85,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 
 	nonce, err := base64.RawURLEncoding.DecodeString(requestData.Nonce)
 	if err != nil {
-		errMsg := fmt.Sprintf("fail to decode nonce from the request: %s", err.Error())
+		errMsg := fmt.Sprintf("failed to decode nonce from the request: %s", err.Error())
 		p := &problems.DefaultProblem{
 			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
 			Title:  string(InvalidRequest),
@@ -99,19 +99,22 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	s.logger.Info("request media type: ", *(param.Accept))
 
 	// Use a map until we finalize ratsd output format
+	// this sets up the response
 	eat := make(map[string]interface{})
 	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
 	eat["eat_profile"] = TagGithubCom2024Veraisonratsd
 	eat["eat_nonce"] = requestData.Nonce
 	pl := s.manager.GetPluginList()
 	if len(pl) == 0 {
-		errMsg := "no sub-attester available"
+		errMsg := fmt.Sprintf("no sub-attester available. Available attesters are: %v",pl)
 		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 		s.reportProblem(w, p)
 		return
 	}
-
+	//now we return to processing the request
 	var options map[string]json.RawMessage
+	
+	s.logger.Debug("attester selection: ", requestData.AttesterSelection)
 	if len(requestData.AttesterSelection) > 0 {
 		err := json.Unmarshal(requestData.AttesterSelection, &options)
 		if err != nil {
@@ -129,8 +132,10 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
+	s.logger.Debug("available attesters (pl): ", pl)
 	for _, pn := range pl {
 		attester, err := s.manager.LookupByName(pn)
+		s.logger.Debug("attester: ", pn, attester, err)
 		if err != nil {
 			errMsg := fmt.Sprintf(
 				"failed to get handle from %s: %s", pn, err.Error())
@@ -138,10 +143,11 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			s.reportProblem(w, p)
 			return
 		}
-
+	
 		formatOut := attester.GetSupportedFormats()
+		s.logger.Debug("attester supported formats: ", formatOut)		
 		if !formatOut.Status.Result || len(formatOut.Formats) == 0 {
-			errMsg := fmt.Sprintf("no supported formats from attester %s: %s ",
+			errMsg := fmt.Sprintf("no supported formats from attester %s: %s",
 				pn, formatOut.Status.Error)
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
