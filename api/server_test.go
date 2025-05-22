@@ -103,7 +103,7 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 		"attester-selection": "attester-slection"}`, validNonce),
 			"failed to parse attester selection: json: cannot unmarshal string into" +
 				` Go value of type map[string]json.RawMessage`},
-		{"no attester sepecified in selected mode", fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
+		{"no attester specified in selected mode", fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
 			"attester-selection must contain at least one attester"},
 	}
 
