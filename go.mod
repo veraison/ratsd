@@ -1,6 +1,6 @@
 module github.com/veraison/ratsd
 
-go 1.24.1
+go 1.23.0
 
 require (
 	github.com/fxamacker/cbor/v2 v2.7.0
@@ -9,13 +9,15 @@ require (
 	github.com/google/go-configfs-tsm v0.3.2
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/moogar0880/problems v0.1.1
+	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.9.0
 	github.com/veraison/cmw v0.1.2-0.20250109140511-d907dcce0c61
 	github.com/veraison/services v0.0.2501
+	go.uber.org/mock v0.5.2
 	go.uber.org/zap v1.23.0
-	golang.org/x/crypto v0.23.0
+	golang.org/x/crypto v0.24.0
 	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.36.4
 )
@@ -58,7 +60,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
-	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1 // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.0 // indirect
@@ -78,15 +79,14 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/mod v0.18.0 // indirect
+	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	golang.org/x/tools v0.22.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250204164813-702378808489 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen

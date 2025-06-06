@@ -3,13 +3,11 @@
 A RATS conceptual message collection daemon 
 
 # Building
-
-Ensure that the
-The binary `ratsd` is built by using `make`
-
-
-
-
+The binary `ratsd` is built by using `make` using the following steps:
+* Install golang version specified in go.mod
+* Ensure GOPATH is available in the shell path (`export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin`)
+* Install build tools using `make install-tools`.
+* Build RATSd using `make`
 
 ## Debian 12
 
