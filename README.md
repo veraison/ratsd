@@ -12,15 +12,8 @@ The binary `ratsd` is built by using `make` using the following steps:
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
 Regeneration of the code for ratsd requires various protobuf packages to be installed before. Use the following commands to install them:
 ```bash
-go install protoc-gen-go
-go install protoc-gen-go-grpc
+make install-tools
 ```
-Alternatively, use the following command to download protobuf packages on Debian and Ubuntu:
-
-```bash
-sudo apt-get -y install protoc-gen-go protoc-gen-go-grpc
-```
-
 Then generate the code with `make generate`
 ## Building ratsd core and leaf attesters
 Use `make build` to build both ratsd core and the leaf attests. To build only the ratsd core, please run `make build-la`. Run `build-sa` to build only the leaf attesters.
