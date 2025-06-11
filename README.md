@@ -15,8 +15,10 @@ Regeneration of the code for ratsd requires the installation of various protobuf
 make install-tools
 ```
 Then generate the code with `make generate`
+
 ## Building ratsd core and leaf attesters
-Use `make build` to build both ratsd core and the leaf attests. To build only the ratsd core, please run `make build-la`. Run `build-sa` to build only the leaf attesters.
+
+Use the 'make build' command to build both the ratsd core and the leaf attesters. To build only the ratsd core, run `make build-la`. Run `make build-sa` to build only the leaf attesters.
 ```console
 $ make build
 go build -o ratsd -buildmode=pie ./cmd
