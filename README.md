@@ -10,7 +10,7 @@ The binary `ratsd` is built by using `make` using the following steps:
 * Build RATSd using `make`
 
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
-Regeneration of the code for ratsd requires various protobuf packages to be installed before. Use the following commands to install them:
+Regeneration of the code for ratsd requires the installation of various protobuf packages beforehand. Use the following commands to install them:
 ```bash
 make install-tools
 ```
