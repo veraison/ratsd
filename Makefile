@@ -41,6 +41,7 @@ clean-la:
 install-tools:
 	go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 	go install google.golang.org/protobuf/cmd/protoc-gen-go
+	go install google.golang.org/protobuf/cmd/protoc-gen-go-grpc
 	go install go.uber.org/mock/mockgen
 
 .PHONY: clean-certs
