@@ -10,9 +10,20 @@ package compositor;
 option go_package = "github.com/veraison/ratsd/proto/compositor";
 
 service Compositor {
+  rpc GetOptions(google.protobuf.Empty) returns (OptionsOut);
   rpc GetSubAttesterID(google.protobuf.Empty) returns (SubAttesterIDOut);
   rpc GetSupportedFormats(google.protobuf.Empty) returns (SupportedFormatsOut);
   rpc GetEvidence(EvidenceIn) returns (EvidenceOut);
+}
+
+message Option {
+  string name = 1;
+  string type = 2;
+}
+
+message OptionsOut {
+  Status status = 1;
+  repeated Option options = 2;
 }
 
 // Status.result = true on sucess, status.result = false on failure.

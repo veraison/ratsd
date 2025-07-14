@@ -28,6 +28,10 @@ func (s *GRPCServer) GetEvidence(ctx context.Context, in *compositor.EvidenceIn)
 	return s.Impl.GetEvidence(in), nil
 }
 
+func (s *GRPCServer) GetOptions(ctx context.Context, e *emptypb.Empty) (*compositor.OptionsOut, error) {
+	return s.Impl.GetOptions(), nil
+}
+
 type GRPCClient struct {
 	client compositor.CompositorClient
 }
@@ -58,6 +62,17 @@ func (c *GRPCClient) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 	resp, err := c.client.GetEvidence(context.Background(), in)
 	if err != nil {
 		return &compositor.EvidenceOut{
+			Status: &compositor.Status{Result: false, Error: err.Error()},
+		}
+	}
+
+	return resp
+}
+
+func (c *GRPCClient) GetOptions() *compositor.OptionsOut {
+	resp, err := c.client.GetOptions(context.Background(), &emptypb.Empty{})
+	if err != nil {
+		return &compositor.OptionsOut{
 			Status: &compositor.Status{Result: false, Error: err.Error()},
 		}
 	}

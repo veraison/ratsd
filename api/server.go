@@ -19,6 +19,7 @@ import (
 // Defines missing consts in the API Spec
 const (
 	ApplicationvndVeraisonCharesJson string = "application/vnd.veraison.chares+json"
+	JsonType string = "application/json"
 )
 
 type Server struct {
@@ -210,4 +211,32 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(eat)
+}
+
+func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
+	resp := []SubAttester{}
+
+	pl := s.manager.GetPluginList()
+	for _, pn := range pl {
+		options := new([]Option)
+		attester, err := s.manager.LookupByName(pn)
+		if err != nil {
+			errMsg := fmt.Sprintf(
+				"failed to get handle from %s: %s", pn, err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
+
+		for _, o := range attester.GetOptions().Options {
+			option := Option{Name: o.Name, DataType: OptionDataType(o.Type)}
+			*options = append(*options, option)
+		}
+		entry := SubAttester{Name: pn, Options: options,}
+		resp = append(resp, entry)
+	}
+
+	w.Header().Set("Content-Type", JsonType)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
 }
