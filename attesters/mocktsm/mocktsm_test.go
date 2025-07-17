@@ -20,6 +20,19 @@ var (
 	p = GetPlugin()
 )
 
+func Test_GetOptions(t *testing.T) {
+	options := []*compositor.Option{
+		&compositor.Option{Name: "privilege_level", Type: "string"},
+	}
+
+	expected := &compositor.OptionsOut{
+		Options: options,
+		Status:  statusSucceeded,
+	}
+
+	assert.Equal(t, expected, p.GetOptions())
+}
+
 func Test_GetSubAttesterID(t *testing.T) {
 	expected := &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,

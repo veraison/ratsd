@@ -47,6 +47,18 @@ func getEvidenceError(e error) *compositor.EvidenceOut {
 	}
 }
 
+func (m *MockPlugin) GetOptions() *compositor.OptionsOut {
+	options := []*compositor.Option{
+		&compositor.Option{Name: "privilege_level", Type: "string"},
+	}
+
+	return &compositor.OptionsOut{
+		Options: options,
+		Status:  statusSucceeded,
+	}
+
+}
+
 func (m *MockPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,
