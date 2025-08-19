@@ -24,12 +24,14 @@ const (
 type Server struct {
 	logger  *zap.SugaredLogger
 	manager plugin.IManager
+	options string
 }
 
-func NewServer(logger *zap.SugaredLogger, manager plugin.IManager) *Server {
+func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
 	return &Server{
 		logger:  logger,
 		manager: manager,
+		options: options,
 	}
 }
 
@@ -124,19 +126,28 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 				Status: http.StatusBadRequest,
 			}
 			s.reportProblem(w, p)
-			fmt.Println(errMsg)
 			return
 		}
+	} else if s.options == "selected" {
+		errMsg := "attester-selection must contain at least one attester"
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
 	}
 
-	for _, pn := range pl {
+	getCMW := func (pn string) bool {
 		attester, err := s.manager.LookupByName(pn)
 		if err != nil {
 			errMsg := fmt.Sprintf(
 				"failed to get handle from %s: %s", pn, err.Error())
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
-			return
+			return false
 		}
 
 		formatOut := attester.GetSupportedFormats()
@@ -145,11 +156,11 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 				pn, formatOut.Status.Error)
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
-			return
+			return false
 		}
 
 		params, hasOption := options[pn]
-		if !hasOption {
+		if !hasOption || string(params) == "null" {
 			params = json.RawMessage{}
 		}
 
@@ -166,11 +177,26 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 				"failed to get attestation report from %s: %s ", pn, out.Status.Error)
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
-			return
+			return false
 		}
 
 		c := cmw.NewMonad(in.ContentType, out.Evidence)
 		collection.AddCollectionItem(pn, c)
+		return true
+	}
+
+	if s.options == "all" {
+		for _, pn := range pl {
+			if !getCMW(pn) {
+				return
+			}
+		}
+	} else {
+		for pn, _ := range options {
+			if !getCMW(pn) {
+				return
+			}
+		}
 	}
 
 	serialized, err := collection.MarshalJSON()
