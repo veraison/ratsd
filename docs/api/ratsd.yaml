@@ -37,6 +37,19 @@ paths:
               $ref: '#/components/schemas/ChaResRequest'
       security:
         - BearerAuth: []
+  /ratsd/subattesters:
+    get:
+      description: Get a list of the sub-attesters available on this machine.
+      operationId: Ratsd_subattesters
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/vnd.veraison.attesters+json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubAttester'
 components:
   parameters:
     ChaResRequestParameters.accept:
@@ -107,6 +120,23 @@ components:
             - tag:github.com,2024:veraison/ratsd
         nested-token:
           $ref: '#/components/schemas/CMW'
+    Option:
+      type: object
+      required:
+        - name
+        - data-type
+      properties:
+        name:
+          type: string
+        data-type:
+          type: string
+          enum:
+            - string
+            - number
+            - integer
+            - boolean
+            - array
+            - object
     ProblemDetails:
       type: object
       properties:
@@ -120,6 +150,17 @@ components:
           type: string
         instance:
           type: string
+    SubAttester:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/Option'
     UnauthorizedError:
       type: object
       required:

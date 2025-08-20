@@ -50,6 +50,16 @@ const (
 	TagGithubCom2024Veraisonratsd EATEatProfile = "tag:github.com,2024:veraison/ratsd"
 )
 
+// Defines values for OptionDataType.
+const (
+	Array   OptionDataType = "array"
+	Boolean OptionDataType = "boolean"
+	Integer OptionDataType = "integer"
+	Number  OptionDataType = "number"
+	Object  OptionDataType = "object"
+	String  OptionDataType = "string"
+)
+
 // Defines values for UnauthorizedErrorStatus.
 const (
 	N401 UnauthorizedErrorStatus = 401
@@ -107,6 +117,21 @@ type EAT struct {
 // EATEatProfile defines model for EAT.EatProfile.
 type EATEatProfile string
 
+// Option defines model for Option.
+type Option struct {
+	DataType OptionDataType `json:"data-type"`
+	Name     string         `json:"name"`
+}
+
+// OptionDataType defines model for Option.DataType.
+type OptionDataType string
+
+// SubAttester defines model for SubAttester.
+type SubAttester struct {
+	Name    string    `json:"name"`
+	Options *[]Option `json:"options,omitempty"`
+}
+
 // UnauthorizedError defines model for UnauthorizedError.
 type UnauthorizedError struct {
 	Detail   *string                 `json:"detail,omitempty"`
@@ -141,6 +166,9 @@ type ServerInterface interface {
 
 	// (POST /ratsd/chares)
 	RatsdChares(w http.ResponseWriter, r *http.Request, params RatsdCharesParams)
+
+	// (GET /ratsd/subattesters)
+	RatsdSubattesters(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -189,6 +217,20 @@ func (siw *ServerInterfaceWrapper) RatsdChares(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RatsdChares(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RatsdSubattesters operation middleware
+func (siw *ServerInterfaceWrapper) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RatsdSubattesters(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -319,6 +361,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/ratsd/chares", wrapper.RatsdChares)
+	m.HandleFunc("GET "+options.BaseURL+"/ratsd/subattesters", wrapper.RatsdSubattesters)
 
 	return m
 }
@@ -326,20 +369,23 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7SW32/bNhDH/xWC21sVWcmCPWjYg+PloQ8FijRDH9JgOJNni5lEcseTW6/Q/z6QtGI7",
-	"UZq0yB6lO54+9+N71FepXOedRctB1l+lB4IOGSk9LRq4wnCF//QY+P29qQSl0HP0MFbWskHQSLKQFjqU",
-	"tdyZCxlUgx1EP976aAlMxq7lMAyjMX3nAvTuI5dEjhIIOY/EBpODRgbTTgQqpLGBwSqcNAYG7lMEtH0n",
-	"65vzqrotRj/bd0uk6MeGWzxwk8ZuoDVaUMaS+0P74PnF/gzDul4bbvplqVxXnFVn5/UGCUxwdkbAQdcY",
-	"06t3wZ+OPRQyGg2hToGjdYS8T2p/zC3vUHFEWrz7+Lh4vPWHmOB9axSwcXa2sbocEUvl7MqsV+GEQ/fm",
-	"Ljg7mfUGUh9WjjpgWcslBPz1vKdWviANmc9Poh/O2uMkgBkDI50EbFFF+COKhPsQoJBfTlxnGDvPW1kz",
-	"9TgU0rrdtPxACvlsMUUzldPl/PpxJgj8lye3Mu13Ts9kO2zk0Cfs/sZUkZ8JV7KWP832up7tlDaL0/Ew",
-	"o0OaB9GmMvrTQs+NI/Mv6v9fq6cv0mpcNyGI/gDtdfX6TOQfVGtMGVVPhrcfYoNy9S4QCGnecxOfUufi",
-	"oWV6vZ/PhtnnNWrsyqV65rLIq/n1B3G5MRqtQrFw7W5AxR+AnbNi/v5tVCFSSBqSVVmVp7E8zqMFb2Qt",
-	"fymrspKF9MBNgsrVmKkGKFN6lzWqMSgyPssxSrht0a5REAbvbMD4tVLM030QBAh17wFWF6L3zorQp/4V",
-	"Yo0WCRiD4AYFjikYKy7n1+LzTCzefRRZtKVMvJS22Fsd046EiwxYHF1jN9Oi2LvMnrnmhtvcYAx84fQ2",
-	"5q2cZbSpBE+v0wSTF+nYSnhWokdbcDierd0CG4ubOnFWVd8AQuA3d5/5N3Eg898/vWDyP8mXM8ctl0iP",
-	"p+G6wfH6FA2E3GfUqMs4beff5Pbkli1231m8h78RT0AFpA2SUK5vtbCORW81UtxMOk3eCK17FOzE+CsQ",
-	"tpbhyw7+9NXhH2/WCfx5XnXmeNuVR8skTfzhGrm5HW6HYRj+CwAA///mvptn7AkAAA==",
+	"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",
+	"btnjJfiqHo5//wUAAP//B2zyTacMAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -49,6 +49,17 @@ func getEvidenceError(e error) *compositor.EvidenceOut {
 	}
 }
 
+func (t *TSMPlugin) GetOptions() *compositor.OptionsOut {
+	options := []*compositor.Option{
+		&compositor.Option{Name: "privilege_level", Type: "string"},
+	}
+
+	return &compositor.OptionsOut{
+		Options: options,
+		Status:  statusSucceeded,
+	}
+}
+
 func (t *TSMPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,

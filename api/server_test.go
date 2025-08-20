@@ -19,6 +19,7 @@ import (
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
 	"github.com/veraison/ratsd/tokens"
+	"github.com/veraison/ratsd/attesters/tsm"
 	"github.com/veraison/services/log"
 )
 
@@ -26,6 +27,54 @@ const (
 	jsonType   = "application/json"
 	validNonce = "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA"
 )
+
+func TestRatsdSubattesters_valid_requests(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return([]string{}).Times(1)
+	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm"}).Times(1)
+	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm","tsm-report"}).Times(1)
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+	dm.EXPECT().LookupByName("tsm-report").Return(&tsm.TSMPlugin{}, nil).AnyTimes()
+	logger := log.Named("test")
+	s := NewServer(logger, dm, "all")
+	tests := []struct {
+		name, response string
+	}{
+		{
+			"no attester",
+			"[]\n",
+		},
+		{
+			"with only mocktsm attester",
+			"[{\"name\":\"mock-tsm\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"}]}]\n",
+		},
+		{
+			"with tsm and mocktsm attester",
+			"[{\"name\":\"mock-tsm\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"}]},{\"name\":\"tsm-report\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"}]}]\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			rb := strings.NewReader(tt.response)
+			r, _ := http.NewRequest(http.MethodGet, "/ratsd/subattesters", rb)
+			s.RatsdSubattesters(w, r)
+
+			expectedCode := http.StatusOK
+			expectedType := jsonType
+			expectedBody := tt.response
+
+			assert.Equal(t, expectedCode, w.Code)
+			assert.Equal(t, expectedType, w.Result().Header.Get("Content-Type"))
+			assert.Equal(t, expectedBody, w.Body.String())
+		})
+	}
+
+}
 
 func TestRatsdChares_wrong_content_type(t *testing.T) {
 	expectedCode := http.StatusBadRequest
