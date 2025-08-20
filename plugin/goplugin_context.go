@@ -3,8 +3,10 @@
 package plugin
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/hashicorp/go-plugin"
@@ -42,15 +44,31 @@ func createPluginContext(
 	path string,
 	logger *zap.SugaredLogger,
 ) (*PluginContext, error) {
-	client := plugin.NewClient(
-		&plugin.ClientConfig{
-			HandshakeConfig:  handshakeConfig,
-			Plugins:          loader.pluginMap,
-			Cmd:              exec.Command(path),
-			Logger:           log.NewInternalLogger(logger),
-			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-		},
-	)
+	cfg := &plugin.ClientConfig{
+		HandshakeConfig:  handshakeConfig,
+		Plugins:          loader.pluginMap,
+		Cmd:              exec.Command(path),
+		Logger:           log.NewInternalLogger(logger),
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+	}
+
+	if len(loader.pluginChecksum) > 0 {
+		basename := filepath.Base(path)
+		pluginName := strings.TrimSuffix(basename, filepath.Ext(basename))
+
+		checksum, ok := loader.pluginChecksum[pluginName]
+		if !ok {
+			return nil, fmt.Errorf("the checksum for plugin %s is missing", pluginName)
+		}
+
+		secureConfig := &plugin.SecureConfig{
+			Checksum:[]byte(checksum),
+			Hash: sha256.New(),
+		}
+		cfg.SecureConfig = secureConfig
+	}
+
+	client := plugin.NewClient(cfg)
 
 	rpcClient, err := client.Client()
 	if err != nil {

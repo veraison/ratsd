@@ -3,10 +3,12 @@
 package plugin
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/hashicorp/go-plugin"
+	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +25,7 @@ type GoPluginLoader struct {
 
 	logger       *zap.SugaredLogger
 	loadedByName map[string]*PluginContext
+	pluginChecksum map[string][]byte
 
 	// This gets specified as Plugins when creating a new go-plugin client.
 	pluginMap map[string]plugin.Plugin
@@ -44,6 +47,7 @@ func CreateGoPluginLoader(
 func (o *GoPluginLoader) Init(dir string) error {
 	o.pluginMap = make(map[string]plugin.Plugin)
 	o.loadedByName = make(map[string]*PluginContext)
+	o.pluginChecksum = make(map[string][]byte)
 	o.Location = dir
 
 	return nil
@@ -53,6 +57,36 @@ func (o *GoPluginLoader) Close() {
 	for _, plugin := range o.loadedByName {
 		plugin.Close()
 	}
+}
+
+func (o *GoPluginLoader) SetChecksum(v *viper.Viper) error {
+	for _, name := range v.AllKeys() {
+		sha256sum := v.Get(name)
+		switch t := sha256sum.(type) {
+		case string:
+			o.logger.Debugw("registered plugin checksum",
+				"name", name,
+				"checksum", t,
+			)
+
+			checksum, err := hex.DecodeString(t)
+			if err != nil {
+				return fmt.Errorf(
+					"failed to load sha256 checksum for %s: %v",
+					name, err,
+				)
+			}
+
+			o.pluginChecksum[name] = checksum
+		default:
+			return fmt.Errorf(
+				"invalid checksum for plugin %q: expected string, got %T",
+				name, t,
+			)
+		}
+	}
+
+	return nil
 }
 
 func RegisterGoPluginUsing(loader *GoPluginLoader, name string) error {
