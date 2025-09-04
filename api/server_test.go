@@ -154,6 +154,15 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 				` Go value of type map[string]json.RawMessage`},
 		{"no attester specified in selected mode", fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
 			"attester-selection must contain at least one attester"},
+		{"invalid attester options",
+			fmt.Sprintf(`{"nonce": "%s",
+			"attester-selection": {"mock-tsm":"invalid"}}`, validNonce),
+			"failed to parse options for mock-tsm: json: cannot unmarshal string into" +
+				` Go value of type map[string]string`},
+		{"request content type unavailable",
+			fmt.Sprintf(`{"nonce": "%s",
+			"attester-selection": {"mock-tsm":{"content-type":"invalid"}}}`, validNonce),
+			"mock-tsm does not support content type invalid"},
 	}
 
 	for _, tt := range tests {
