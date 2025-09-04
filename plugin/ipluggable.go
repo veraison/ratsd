@@ -15,6 +15,9 @@ type IPluggable interface {
 	// the output.
 	GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut
 
+	// GetOptions returns a list of attester-specific options user may specify in /chares
+	GetOptions() *compositor.OptionsOut
+
 	// GetSubAttesterID returns a *compositor.SubAttesterIDOut that contains
 	// the name and the version of the subattesters in field SubAttesterID
 	GetSubAttesterID() *compositor.SubAttesterIDOut
