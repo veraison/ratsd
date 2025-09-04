@@ -160,14 +160,53 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
+		outputCt := formatOut.Formats[0].ContentType
 		params, hasOption := options[pn]
 		if !hasOption || string(params) == "null" {
 			params = json.RawMessage{}
+		} else {
+			attesterOptions := make(map[string]string)
+			if err := json.Unmarshal(params, &attesterOptions); err != nil {
+				errMsg := fmt.Sprintf(
+					"failed to parse options for %s: %v", pn, err)
+				p := &problems.DefaultProblem{
+					Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+					Title:  string(InvalidRequest),
+					Detail: errMsg,
+					Status: http.StatusBadRequest,
+				}
+				s.reportProblem(w, p)
+				return false
+			}
+
+			validCt := false
+			if desiredCt, ok := attesterOptions["content-type"]; ok {
+				for _, f := range formatOut.Formats {
+					if f.ContentType == desiredCt {
+						outputCt = desiredCt
+						validCt = true
+						break
+					}
+				}
+
+				if !validCt {
+					errMsg := fmt.Sprintf(
+						"%s does not support content type %s", pn, desiredCt)
+					p := &problems.DefaultProblem{
+						Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+						Title:  string(InvalidRequest),
+						Detail: errMsg,
+						Status: http.StatusBadRequest,
+					}
+					s.reportProblem(w, p)
+					return false
+				}
+			}
 		}
 
-		s.logger.Info("output content type: ", formatOut.Formats[0].ContentType)
+		s.logger.Info(pn, " output content type: ", outputCt)
 		in := &compositor.EvidenceIn{
-			ContentType: formatOut.Formats[0].ContentType,
+			ContentType: outputCt,
 			Nonce:       nonce,
 			Options:     params,
 		}
