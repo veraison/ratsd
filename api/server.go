@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/moogar0880/problems"
 	"github.com/veraison/cmw"
@@ -23,16 +24,61 @@ const (
 )
 
 type Server struct {
-	logger  *zap.SugaredLogger
-	manager plugin.IManager
-	options string
+	logger       *zap.SugaredLogger
+	manager      plugin.IManager
+	options      string
+	mockMode     bool
+	mockEvidence *cmw.CMW
 }
 
 func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
 	return &Server{
-		logger:  logger,
-		manager: manager,
-		options: options,
+		logger:   logger,
+		manager:  manager,
+		options:  options,
+		mockMode: false,
+	}
+}
+
+func NewMockServer(logger *zap.SugaredLogger, evidenceFile string) *Server {
+	// Load the evidence file
+	evidenceData, err := os.ReadFile(evidenceFile)
+	if err != nil {
+		logger.Fatalf("Failed to read evidence file %s: %v", evidenceFile, err)
+	}
+
+	// Parse the evidence file as JSON
+	var evidenceJSON map[string]interface{}
+	if err := json.Unmarshal(evidenceData, &evidenceJSON); err != nil {
+		logger.Fatalf("Failed to parse evidence file as JSON: %v", err)
+	}
+
+	// Extract the outblob field which contains the CMW data
+	outblobStr, ok := evidenceJSON["outblob"].(string)
+	if !ok {
+		logger.Fatalf("Evidence file must contain 'outblob' field with CMW data")
+	}
+
+	// Decode the base64 CMW data
+	cmwData, err := base64.StdEncoding.DecodeString(outblobStr)
+	if err != nil {
+		logger.Fatalf("Failed to decode CMW data from outblob: %v", err)
+	}
+
+	// Parse the CMW
+	cmwEvidence := &cmw.CMW{}
+	if err := cmwEvidence.Unmarshal(cmwData); err != nil {
+		logger.Fatalf("Failed to unmarshal CMW data: %v", err)
+	}
+
+	logger.Infof("Loaded mock evidence from %s", evidenceFile)
+	
+	return &Server{
+		logger:       logger,
+		manager:      nil, // No plugin manager in mock mode
+		options:      "all",
+		mockMode:     true,
+		mockEvidence: cmwEvidence,
 	}
 }
 
@@ -45,6 +91,12 @@ func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProb
 
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
 	var requestData ChaResRequest
+
+	// Handle mock mode - serve pre-loaded evidence
+	if s.mockMode {
+		s.handleMockEvidence(w, r, param)
+		return
+	}
 
 	// Check if content type matches the expectation
 	ct := r.Header.Get("Content-Type")
