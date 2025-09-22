@@ -1,0 +1,12 @@
+{
+  "attesters": {
+    "mock-tsm": {
+      "content_type": "application/vnd.veraison.configfs-tsm+json",
+      "evidence": "eyJwcm92aWRlciI6Im1vY2stdHNtIiwib3V0YmxvYiI6InByaXZsZXZlbDogMFxuaW5ibG9iOiA3NDY1NzM3NDJkNmU2Zjc2NjM2NSIsImF1eGJsb2IiOiJZWFY0WW14dlltND0ifQ=="
+    },
+    "arm-cca": {
+      "content_type": "application/vnd.veraison.arm-cca+cbor",
+      "evidence": "pGF0eXBlb2FybS1jY2EtZ3Vlc3RhcmVhbG2hYXCiaWNoYWxsZW5nZVggdGVzdC1ub25jZS0xMjM0NTY3ODkwYWJjZGVmaG1lYXN1cmVtZW50WCBmYWtlLW1lYXN1cmVtZW50LWZvci10ZXN0LXB1cnBvc2Vz"
+    }
+  }
+}

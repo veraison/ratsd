@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/moogar0880/problems"
 	"github.com/veraison/cmw"
@@ -23,16 +24,73 @@ const (
 )
 
 type Server struct {
-	logger  *zap.SugaredLogger
-	manager plugin.IManager
-	options string
+	logger       *zap.SugaredLogger
+	manager      plugin.IManager
+	options      string
+	mockMode     bool
+	mockEvidence *cmw.CMW
 }
 
 func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
 	return &Server{
-		logger:  logger,
-		manager: manager,
-		options: options,
+		logger:   logger,
+		manager:  manager,
+		options:  options,
+		mockMode: false,
+	}
+}
+
+type MockEvidenceData struct {
+	Attesters map[string]MockAttesterEvidence `json:"attesters"`
+}
+
+type MockAttesterEvidence struct {
+	ContentType string `json:"content_type"`
+	Evidence    string `json:"evidence"` // base64 encoded evidence data
+}
+
+func NewMockServer(logger *zap.SugaredLogger, evidenceFile string) *Server {
+	// Load the evidence file
+	evidenceData, err := os.ReadFile(evidenceFile)
+	if err != nil {
+		logger.Fatalf("Failed to read evidence file %s: %v", evidenceFile, err)
+	}
+
+	// Parse the evidence file as JSON containing mock attester data
+	var mockData MockEvidenceData
+	if err := json.Unmarshal(evidenceData, &mockData); err != nil {
+		logger.Fatalf("Failed to parse evidence file as JSON: %v", err)
+	}
+
+	if len(mockData.Attesters) == 0 {
+		logger.Fatal("Evidence file must contain at least one attester in 'attesters' field")
+	}
+
+	// Create CMW collection from mock data
+	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	
+	for attesterName, attesterEvidence := range mockData.Attesters {
+		// Decode the base64 evidence
+		evidenceBytes, err := base64.StdEncoding.DecodeString(attesterEvidence.Evidence)
+		if err != nil {
+			logger.Fatalf("Failed to decode evidence for attester %s: %v", attesterName, err)
+		}
+		
+		// Create a monad and add it to the collection
+		monad := cmw.NewMonad(attesterEvidence.ContentType, evidenceBytes)
+		collection.AddCollectionItem(attesterName, monad)
+		logger.Infof("Added mock evidence for attester %s with content type %s", 
+			attesterName, attesterEvidence.ContentType)
+	}
+
+	logger.Infof("Loaded mock evidence from %s with %d attesters", evidenceFile, len(mockData.Attesters))
+	
+	return &Server{
+		logger:       logger,
+		manager:      nil, // No plugin manager in mock mode
+		options:      "all",
+		mockMode:     true,
+		mockEvidence: collection,
 	}
 }
 
@@ -43,8 +101,79 @@ func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProb
 	json.NewEncoder(w).Encode(prob)
 }
 
+func (s *Server) handleMockEvidence(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
+	var requestData ChaResRequest
+
+	// Check if content type matches the expectation
+	ct := r.Header.Get("Content-Type")
+	if ct != ApplicationvndVeraisonCharesJson {
+		errMsg := fmt.Sprintf("wrong content type, expect %s (got %s)", ApplicationvndVeraisonCharesJson, ct)
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
+
+	respCt := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	if param.Accept != nil {
+		s.logger.Info("request media type: ", *(param.Accept))
+		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
+			errMsg := fmt.Sprintf(
+				"wrong accept type, expect %s (got %s)", respCt, *(param.Accept))
+			p := problems.NewDetailedProblem(http.StatusNotAcceptable, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
+	}
+
+	payload, _ := io.ReadAll(r.Body)
+	err := json.Unmarshal(payload, &requestData)
+	if err != nil || len(requestData.Nonce) < 1 {
+		errMsg := "fail to retrieve nonce from the request"
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
+
+	s.logger.Info("Mock mode: serving pre-loaded evidence for nonce: ", requestData.Nonce)
+
+	// Create response using mock evidence
+	eat := make(map[string]interface{})
+	eat["eat_profile"] = TagGithubCom2024Veraisonratsd
+	eat["eat_nonce"] = requestData.Nonce
+
+	// Serialize the pre-loaded CMW evidence
+	serialized, err := s.mockEvidence.MarshalJSON()
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to serialize mock CMW evidence: %s", err.Error())
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		s.reportProblem(w, p)
+		return
+	}
+	
+	eat["cmw"] = serialized
+	w.Header().Set("Content-Type", respCt)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(eat)
+}
+
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
 	var requestData ChaResRequest
+
+	// Handle mock mode - serve pre-loaded evidence
+	if s.mockMode {
+		s.handleMockEvidence(w, r, param)
+		return
+	}
 
 	// Check if content type matches the expectation
 	ct := r.Header.Get("Content-Type")
@@ -254,6 +383,21 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
 	resp := []SubAttester{}
+
+	// Handle mock mode - return a mock attester list
+	if s.mockMode {
+		s.logger.Info("Mock mode: serving mock sub-attesters list")
+		mockAttester := SubAttester{
+			Name:    "mock-attester",
+			Options: &[]Option{},
+		}
+		resp = append(resp, mockAttester)
+		
+		w.Header().Set("Content-Type", JsonType)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
 
 	pl := s.manager.GetPluginList()
 	for _, pn := range pl {
