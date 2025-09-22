@@ -1,8 +1,0 @@
-{
-  "attesters": {
-    "mock-tsm": {
-      "content_type": "application/vnd.veraison.configfs-tsm+json",
-      "evidence": "eyJwcm92aWRlciI6Im1vY2stdHNtIiwib3V0YmxvYiI6InByaXZsZXZlbDogMFxuaW5ibG9iOiA3NDY1NzM3NDJkNmU2Zjc2NjM2NSIsImF1eGJsb2IiOiJZWFY0WW14dlltND0ifQ=="
-    }
-  }
-}

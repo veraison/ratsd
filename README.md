@@ -3,43 +3,6 @@
 A RATS conceptual message collection daemon 
 
 # Building
-
-## Prerequisites
-
-Before building RATSD, you need to install the following system dependencies:
-
-### Protocol Buffer Compiler (protoc)
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get update
-sudo apt-get install -y protobuf-compiler
-```
-
-**RHEL/CentOS/Fedora:**
-```bash
-# For RHEL/CentOS
-sudo yum install -y protobuf-compiler
-# For Fedora
-sudo dnf install -y protobuf-compiler
-```
-
-**macOS:**
-```bash
-brew install protobuf
-```
-
-**From Source (if package not available):**
-```bash
-# Download and install protoc from https://github.com/protocolbuffers/protobuf/releases
-# Example for Linux x86_64:
-curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protoc-25.1-linux-x86_64.zip
-unzip protoc-25.1-linux-x86_64.zip -d $HOME/.local
-export PATH="$PATH:$HOME/.local/bin"
-```
-
-### Go Dependencies
-
 The binary `ratsd` is built by using `make` using the following steps:
 * Install golang version specified in go.mod
 * Ensure GOPATH is available in the shell path (`export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin`)
@@ -47,27 +10,11 @@ The binary `ratsd` is built by using `make` using the following steps:
 * Build RATSd using `make`
 
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
-Regeneration of the code for ratsd requires the installation of protobuf compiler and Go protobuf plugins. 
-
-**Prerequisites:** Make sure you have installed the `protoc` compiler (see Prerequisites section above).
-
-Then install the Go code generation tools:
+Regeneration of the code for ratsd requires the installation of various protobuf packages beforehand. Use the following commands to install them:
 ```bash
 make install-tools
 ```
-
-Generate the code:
-```bash
-make generate
-```
-
-**Note:** The `make install-tools` command installs:
-- `protoc-gen-go` - Go protocol buffer plugin
-- `protoc-gen-go-grpc` - Go gRPC plugin  
-- `oapi-codegen` - OpenAPI code generator
-- `mockgen` - Mock generation tool
-
-All of these require the base `protoc` compiler to be installed separately.
+Then generate the code with `make generate`
 
 ## Building ratsd core and leaf attesters
 
@@ -145,85 +92,3 @@ the following example:
     }
 }
 ```
-
-## Mock Mode for Development and Testing
-
-RATSD includes a mock mode that allows you to serve pre-defined evidence for early end-to-end testing without requiring real attesters or hardware. This is particularly useful for:
-
-- Development and integration testing
-- CI/CD pipeline validation  
-- Testing with specific evidence scenarios
-- Demonstrating RATSD functionality
-
-### Running RATSD in Mock Mode
-
-To start RATSD in mock mode, use the `mock` subcommand:
-
-```bash
-./ratsd mock --evidence examples/mock/simple-mock-tsm.json
-```
-
-### Mock Evidence File Format
-
-Mock evidence files use JSON format with the following structure:
-
-```json
-{
-  "attesters": {
-    "attester-name": {
-      "content_type": "application/vnd.veraison.content-type",
-      "evidence": "base64-encoded-evidence-data"
-    }
-  }
-}
-```
-
-### Example Files
-
-RATSD provides several example mock evidence files:
-
-- `examples/mock/simple-mock-tsm.json` - Single TSM attester evidence
-- `examples/mock/multi-attester-evidence.json` - Multiple attesters (TSM + ARM CCA)
-- `examples/mock/arm-cca-evidence.json` - ARM CCA attester evidence
-
-### Using Mock Mode
-
-1. **Start the mock server:**
-   ```bash
-   ./ratsd mock --evidence examples/mock/simple-mock-tsm.json
-   ```
-
-2. **Query evidence (same API as normal mode):**
-   ```bash
-   curl -X POST http://localhost:8895/ratsd/chares \
-     -H "Content-Type: application/vnd.veraison.chares+json" \
-     -d '{"nonce":"dGVzdC1ub25jZS0xMjM0NTY3ODkwYWJjZGVm"}'
-   ```
-
-3. **Query available attesters:**
-   ```bash
-   curl http://localhost:8895/ratsd/subattesters
-   ```
-
-### Creating Custom Mock Evidence
-
-To create your own mock evidence files:
-
-1. **Determine the evidence format** for your use case
-2. **Base64 encode** the evidence data
-3. **Create a JSON file** following the format above
-4. **Test with RATSD** using the mock mode
-
-Example:
-```json
-{
-  "attesters": {
-    "my-custom-attester": {
-      "content_type": "application/my-custom-format",
-      "evidence": "eyJjdXN0b21fZGF0YSI6InRlc3QifQ=="
-    }
-  }
-}
-```
-
-The mock mode serves the pre-loaded evidence for any nonce, making it ideal for predictable testing scenarios.
