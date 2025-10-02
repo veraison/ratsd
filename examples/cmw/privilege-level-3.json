@@ -1,0 +1,13 @@
+{
+  "__cmwc_t": "tag:github.com,2025:veraison/ratsd/cmw",
+  "mock-tsm": [
+    "application/vnd.veraison.configfs-tsm+json",
+    {
+      "auxblob": "cHJpdmlsZWdlLWxldmVsLXRlc3QtYXV4",
+      "outblob": "cHJpdmlsZWdlLWxldmVsLXRlc3Qtb3V0YmxvYi13aXRoLW1heGltdW0tc2VjdXJpdHktcHJpdmlsZWdlLWxldmVsLTM=",
+      "provider": "secure-enclave",
+      "privilege_level": "3",
+      "description": "Maximum privilege level for secure operations"
+    }
+  ]
+}

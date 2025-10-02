@@ -1,0 +1,11 @@
+{
+  "__cmwc_t": "tag:github.com,2025:veraison/ratsd/cmw",
+  "mock-tsm": [
+    "application/vnd.veraison.configfs-tsm+json",
+    {
+      "auxblob": "YVhWNFlteHZZZw==",
+      "outblob": "cHJpdmlsZWdlLWxldmVsLWJhc2ljLW1vY2stdHNtLWV4YW1wbGUtZGF0YQ==",
+      "provider": "mock-hardware"
+    }
+  ]
+}
