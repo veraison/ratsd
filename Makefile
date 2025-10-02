@@ -95,7 +95,7 @@ install-tools: check-protoc
 	go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 	go install google.golang.org/protobuf/cmd/protoc-gen-go
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-	go install github.com/golang/mock/mockgen
+	go install go.uber.org/mock/mockgen@latest
 
 .PHONY: check-protoc
 check-protoc:
