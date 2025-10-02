@@ -5,7 +5,6 @@ go 1.23.0
 require (
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/getkin/kin-openapi v0.128.0
-	github.com/golang/mock v1.6.0
 	github.com/google/go-configfs-tsm v0.3.2
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/moogar0880/problems v0.1.1
