@@ -4,6 +4,7 @@ package tsm
 
 import (
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
@@ -20,15 +21,19 @@ var (
 )
 
 func Test_getEvidenceError(t *testing.T) {
-	e := fmt.Errorf("sample error")
+	tests := []uint32 {http.StatusBadRequest, http.StatusBadRequest}
+	for _, tt := range tests {
+		e := fmt.Errorf("sample error")
 
-	expected := &compositor.EvidenceOut{
-		Status: &compositor.Status{
-			Result: false, Error: "sample error",
-		},
+		expected := &compositor.EvidenceOut{
+			Status: &compositor.Status{
+				Result: false, Error: "sample error",
+			},
+			StatusCode: tt,
+		}
+
+		assert.Equal(t, expected, getEvidenceError(e, tt))
 	}
-
-	assert.Equal(t, expected, getEvidenceError(e))
 }
 
 func Test_GetOptions(t *testing.T) {
@@ -87,6 +92,7 @@ func Test_GetEvidence_wrong_nonce_size(t *testing.T) {
 			Result: false,
 			Error:  errMsg,
 		},
+		StatusCode: http.StatusBadRequest,
 	}
 
 	assert.Equal(t, expected, p.GetEvidence(in))
@@ -104,6 +110,7 @@ func Test_GetEvidence_invalid_format(t *testing.T) {
 			Result: false,
 			Error:  "no supported format in tsm plugin matches the requested format",
 		},
+		StatusCode: http.StatusBadRequest,
 	}
 
 	assert.Equal(t, expected, p.GetEvidence(in))
@@ -133,6 +140,7 @@ func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 					Result: false,
 					Error:  tt.msg,
 				},
+				StatusCode: http.StatusBadRequest,
 			}
 
 			assert.Equal(t, expected, p.GetEvidence(in))
