@@ -3,6 +3,43 @@
 A RATS conceptual message collection daemon 
 
 # Building
+
+## Prerequisites
+
+Before building RATSD, you need to install the following system dependencies:
+
+### Protocol Buffer Compiler (protoc)
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y protobuf-compiler
+```
+
+**RHEL/CentOS/Fedora:**
+```bash
+# For RHEL/CentOS
+sudo yum install -y protobuf-compiler
+# For Fedora
+sudo dnf install -y protobuf-compiler
+```
+
+**macOS:**
+```bash
+brew install protobuf
+```
+
+**From Source (if package not available):**
+```bash
+# Download and install protoc from https://github.com/protocolbuffers/protobuf/releases
+# Example for Linux x86_64:
+curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protoc-25.1-linux-x86_64.zip
+unzip protoc-25.1-linux-x86_64.zip -d $HOME/.local
+export PATH="$PATH:$HOME/.local/bin"
+```
+
+### Go Dependencies
+
 The binary `ratsd` is built by using `make` using the following steps:
 * Install golang version specified in go.mod
 * Ensure GOPATH is available in the shell path (`export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin`)
@@ -10,11 +47,27 @@ The binary `ratsd` is built by using `make` using the following steps:
 * Build RATSd using `make`
 
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
-Regeneration of the code for ratsd requires the installation of various protobuf packages beforehand. Use the following commands to install them:
+Regeneration of the code for ratsd requires the installation of protobuf compiler and Go protobuf plugins. 
+
+**Prerequisites:** Make sure you have installed the `protoc` compiler (see Prerequisites section above).
+
+Then install the Go code generation tools:
 ```bash
 make install-tools
 ```
-Then generate the code with `make generate`
+
+Generate the code:
+```bash
+make generate
+```
+
+**Note:** The `make install-tools` command installs:
+- `protoc-gen-go` - Go protocol buffer plugin
+- `protoc-gen-go-grpc` - Go gRPC plugin  
+- `oapi-codegen` - OpenAPI code generator
+- `mockgen` - Mock generation tool
+
+All of these require the base `protoc` compiler to be installed separately.
 
 ## Building ratsd core and leaf attesters
 

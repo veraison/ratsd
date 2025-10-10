@@ -5,7 +5,6 @@ go 1.23.0
 require (
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/getkin/kin-openapi v0.131.0
-	github.com/golang/mock v1.6.0
 	github.com/google/go-configfs-tsm v0.3.2
 	github.com/hashicorp/go-plugin v1.4.4
 	github.com/moogar0880/problems v0.1.1
@@ -18,7 +17,8 @@ require (
 	go.uber.org/mock v0.5.2
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.36.0
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.65.0
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.5.1
 	google.golang.org/protobuf v1.36.4
 )
 
