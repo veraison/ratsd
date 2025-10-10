@@ -215,7 +215,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		if !out.Status.Result {
 			errMsg := fmt.Sprintf(
 				"failed to get attestation report from %s: %s ", pn, out.Status.Error)
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			p := problems.NewDetailedProblem(int(out.StatusCode), errMsg)
 			s.reportProblem(w, p)
 			return false
 		}

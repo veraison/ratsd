@@ -5,6 +5,7 @@ package mocktsm
 import (
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,6 +66,7 @@ func Test_GetEvidence_wrong_nonce_size(t *testing.T) {
 			Result: false,
 			Error:  errMsg,
 		},
+		StatusCode: http.StatusBadRequest,
 	}
 
 	assert.Equal(t, expected, p.GetEvidence(in))
@@ -82,6 +84,7 @@ func Test_GetEvidence_invalid_format(t *testing.T) {
 			Result: false,
 			Error:  "no supported format in mock TSM plugin matches the requested format",
 		},
+		StatusCode: http.StatusBadRequest,
 	}
 
 	assert.Equal(t, expected, p.GetEvidence(in))
@@ -106,6 +109,7 @@ func Test_GetEvidence_No_Options(t *testing.T) {
 	expected := &compositor.EvidenceOut{
 		Status:   statusSucceeded,
 		Evidence: outEncoded,
+		StatusCode: http.StatusOK,
 	}
 
 	assert.Equal(t, expected, p.GetEvidence(in))
@@ -134,6 +138,7 @@ func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 					Result: false,
 					Error:  tt.msg,
 				},
+				StatusCode: http.StatusBadRequest,
 			}
 
 			assert.Equal(t, expected, p.GetEvidence(in))
@@ -161,6 +166,7 @@ func Test_GetEvidence_With_Valid_Privilege_level(t *testing.T) {
 	expected := &compositor.EvidenceOut{
 		Status:   statusSucceeded,
 		Evidence: outEncoded,
+		StatusCode: http.StatusOK,
 	}
 
 	assert.Equal(t, expected, p.GetEvidence(in))
