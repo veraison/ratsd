@@ -3,12 +3,10 @@
 A RATS conceptual message collection daemon 
 
 # Building
-The binary `ratsd` is built by using `make` using the following steps:
-* Install golang version specified in go.mod
-* Ensure GOPATH is available in the shell path (`export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin`)
-* Install build tools using `make install-tools`.
-* Build RATSd using `make`
-
+The binary ratsd is built by using make using the following steps:
+- Install golang version specified in go.mod
+- Ensure GOPATH is available in the shell path (export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin)
+- Build RATSd using make
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
 Regeneration of the code for ratsd requires the installation of various protobuf packages beforehand. Use the following commands to install them:
 ```bash
