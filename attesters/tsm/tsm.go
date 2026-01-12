@@ -95,7 +95,7 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 		if in.ContentType == format.ContentType {
 			req := &report.Request{
 				InBlob:     in.Nonce,
-				GetAuxBlob: true,
+				GetAuxBlob: false,
 			}
 
 			options := make(map[string]string)
@@ -133,6 +133,17 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				Provider: resp.Provider,
 				OutBlob:  resp.OutBlob,
 				AuxBlob:  resp.AuxBlob,
+			}
+
+			// SEV-SNP stores cert table in auxblob. Get the report one more time to fetch the auxblob
+			if resp.Provider == "sev_guest" {
+				req.GetAuxBlob = true
+				resp, err := report.Get(client, req)
+				if err != nil {
+					errMsg := fmt.Errorf("failed to get TSM report: %v", err)
+					return getEvidenceError(errMsg)
+				}
+				out.AuxBlob = resp.AuxBlob
 			}
 
 			var encodeOp func() ([]byte, error)
