@@ -60,5 +60,6 @@ message EvidenceIn {
 
 message EvidenceOut {
   Status status = 1;
-  bytes evidence = 2;
+  uint32 statusCode = 2;
+  bytes evidence = 3;
 }
