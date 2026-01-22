@@ -28,6 +28,18 @@ type Server struct {
 	options string
 }
 
+func responseCodeToHTTP(responseCode uint32) int {
+	// Plugin should return 200 on success, 400 for caller input errors, and 500 for everything else.
+	switch responseCode {
+	case 200:
+		return http.StatusOK
+	case 400:
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
 func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
 	return &Server{
 		logger:  logger,
@@ -215,7 +227,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		if !out.Status.Result {
 			errMsg := fmt.Sprintf(
 				"failed to get attestation report from %s: %s ", pn, out.Status.Error)
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			p := problems.NewDetailedProblem(responseCodeToHTTP(out.StatusCode), errMsg)
 			s.reportProblem(w, p)
 			return false
 		}

@@ -5,6 +5,7 @@ package mocktsm
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/google/go-configfs-tsm/configfs/configfsi"
@@ -39,11 +40,12 @@ type MockPlugin struct {
 	client *faketsm.Client
 }
 
-func getEvidenceError(e error) *compositor.EvidenceOut {
+func getEvidenceError(e error, statusCode uint32) *compositor.EvidenceOut {
 	return &compositor.EvidenceOut{
 		Status: &compositor.Status{
 			Result: false, Error: e.Error(),
 		},
+		StatusCode: statusCode,
 	}
 }
 
@@ -78,13 +80,13 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 		errMsg := fmt.Errorf(
 			"nonce size of the mockTSM attester should be %d, got %d",
 			nonceSize, uint32(len(in.Nonce)))
-		return getEvidenceError(errMsg)
+		return getEvidenceError(errMsg, http.StatusBadRequest)
 	}
 
 	if in.ContentType != mediaType {
 		errMsg := fmt.Errorf(
 			"no supported format in mock TSM plugin matches the requested format")
-		return getEvidenceError(errMsg)
+		return getEvidenceError(errMsg, http.StatusBadRequest)
 	}
 	req := &report.Request{
 		InBlob:     in.Nonce,
@@ -96,7 +98,7 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 		if err := json.Unmarshal(in.Options, &options); err != nil {
 			errMsg := fmt.Errorf(
 				"failed to parse %s: %v", in.Options, err)
-			return getEvidenceError(errMsg)
+			return getEvidenceError(errMsg, http.StatusBadRequest)
 		}
 	}
 
@@ -105,7 +107,7 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 		if err != nil || level < 0 {
 			errMsg := fmt.Errorf("privilege_level %s is invalid",
 			privlevel)
-			return getEvidenceError(errMsg)
+			return getEvidenceError(errMsg, http.StatusBadRequest)
 		}
 		req.Privilege = &report.Privilege{Level: uint(level)}
 	}
@@ -113,7 +115,7 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 	resp, err := report.Get(m.client, req)
 	if err != nil {
 		errMsg := fmt.Errorf("failed to get mock TSM report: %v", err)
-		return getEvidenceError(errMsg)
+		return getEvidenceError(errMsg, http.StatusInternalServerError)
 	}
 
 	out := &tokens.TSMReport{
@@ -125,12 +127,13 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 	outEncoded, err := out.ToJSON()
 	if err != nil {
 		errMsg := fmt.Errorf("failed to JSON encode mock TSM report: %v", err)
-		return getEvidenceError(errMsg)
+		return getEvidenceError(errMsg, http.StatusInternalServerError)
 	}
 
 	return &compositor.EvidenceOut{
 		Status:   statusSucceeded,
 		Evidence: outEncoded,
+		StatusCode: http.StatusOK,
 	}
 }
 
