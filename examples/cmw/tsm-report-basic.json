@@ -1,0 +1,12 @@
+{
+  "__cmwc_t": "tag:github.com,2025:veraison/ratsd/cmw",
+  "tsm-report": [
+    "application/vnd.veraison.configfs-tsm+json",
+    {
+      "auxblob": "dHNtLXJlcG9ydC1hdXg=",
+      "outblob": "dHNtLXJlcG9ydC1vdXRibG9iLWRhdGEtZXhhbXBsZS1mb3ItcmF0c2QtZGVtb25zdHJhdGlvbi1wdXJwb3Nlcy1vbmx5LXRoaXMtaXMtbm90LWEtcmVhbC10c20tcmVwb3J0LWJ1dC1hLXNhbXBsZS1mb3ItdGVzdGluZw==",
+      "provider": "tsm-hardware",
+      "privilege_level": "0"
+    }
+  ]
+}
