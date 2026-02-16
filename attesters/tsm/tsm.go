@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
@@ -136,7 +137,8 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			}
 
 			// SEV-SNP stores cert table in auxblob. Get the report one more time to fetch the auxblob
-			if resp.Provider == "sev_guest" {
+			// resp.Provider might contain newlines
+			if strings.TrimSpace(resp.Provider) == "sev_guest" {
 				req.GetAuxBlob = true
 				resp, err := report.Get(client, req)
 				if err != nil {
