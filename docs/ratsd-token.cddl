@@ -1,0 +1,84 @@
+start = eat.CBOR-ONLY<ratsd-token> /
+        eat.JSON-ONLY<ratsd-token-legacy>
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; RATSD CMW collection ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+ratsd-collection = {
+  "__cmwc_t" => "tag:github.com,2025:veraison/ratsd/cmw"
+  + text => eat.JC<cmw.json-record, cmw.cbor-record>
+}
+
+;;;;;;;;;;;;;;
+;; token v2 ;;
+;;;;;;;;;;;;;;
+
+ratsd-token = #6.18([
+  protected: bytes .cbor phdrs
+  unprotected: uhdrs
+  payload: bytes .cbor ratsd-collection
+  signature: bytes
+])
+
+phdrs = {
+  15: {                           ; CWT Claims (RFC 9597)
+    10: bytes .size (8..64)         ; EAT nonce (RFC 9711)
+    265: "tag:github.com,2026:veraison/ratsd/v2"  ; EAT profile (RFC 9711)
+  }
+  33: bytes / [ 2*certs: bytes ]  ; x5chain (RFC 9360)
+}
+
+uhdrs = {}
+
+;;;;;;;;;;;;;;;;;;
+;; legacy token ;;
+;;;;;;;;;;;;;;;;;;
+
+ratsd-token-legacy = {
+  "eat_profile": "tag:github.com,2024:veraison/ratsd/v2"
+  "eat_nonce": text .size (8..88)
+  "cmw": text ; .b64u ratsd-collection
+}
+
+;;;;;;;;;;;;;;;;
+;; CMW import ;;
+;;;;;;;;;;;;;;;;
+
+;# import cmw
+
+cmw.cbor-record = [
+  type: cmw.coap-content-format-type / cmw.media-type
+  value: bytes
+  ? ind: uint .bits cmw.cm-type
+]
+
+cmw.media-type = text ; simplified
+
+cmw.coap-content-format-type = uint .size 2
+
+cmw.cm-type = &(
+  reference-values: 0
+  endorsements: 1
+  evidence: 2
+  attestation-results: 3
+  appraisal-policy: 4
+)
+
+cmw.json-record = [
+  type: cmw.media-type
+  value: cmw.base64url-string
+  ? ind: uint .bits cmw.cm-type
+]
+
+cmw.base64url-string = text .regexp "[A-Za-z0-9_-]+"
+
+;;;;;;;;;;;;;;;;
+;; EAT import ;;
+;;;;;;;;;;;;;;;;
+
+;# import eat
+
+eat.JSON-ONLY<J> = J .feature "json"
+eat.CBOR-ONLY<C> = C .feature "cbor"
+eat.JC<J,C> = eat.JSON-ONLY<J> / eat.CBOR-ONLY<C>
