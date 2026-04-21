@@ -12,14 +12,19 @@ import (
 )
 
 const (
-	ratsdMediaType = "tag:github.com,2025:veraison/ratsd/cmw"
+	ratsdMediaType         = "tag:github.com,2025:veraison/ratsd/cmw"
+	CWTClaimsNonce   int64 = 10
+	CWTClaimsProfile int64 = 265
 )
+
+const ()
 
 // Evidence is the wrapper around the RATSD token, including the COSE envelope and
 // the underlying CMWCollection
 // nolint: golint
 type Evidence struct {
 	token             *cmw.CMW
+	Header            cose.CWTClaims
 	SigningCert       *x509.Certificate
 	IntermediateCerts []*x509.Certificate
 	message           *cose.Sign1Message
@@ -33,13 +38,10 @@ func NewEvidence() (*Evidence, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := NewratsdCwtMap()
-	m.Addprofile(ratsdMediaType)
-	if m == nil {
-		return nil, errors.New("unable to get cwt headers")
-	}
+	h := make(cose.CWTClaims)
+	h[CWTClaimsProfile] = ratsdMediaType
 
-	return &Evidence{token: ev, message: msg}, nil
+	return &Evidence{token: ev, Header: h, message: msg}, nil
 }
 
 func NewEvidenceWithParams() (*Evidence, error) {
@@ -47,16 +49,14 @@ func NewEvidenceWithParams() (*Evidence, error) {
 }
 
 func (e *Evidence) AddNonce(nonce []byte) error {
-	m := GetratsdCwtMap()
-	if m == nil {
-		return errors.New("ratsd claims map does not exist")
+	if e.Header == nil {
+		return errors.New("no header present in the Evidence")
 	}
-	m.AddNonce(nonce)
+	e.Header[CWTClaimsNonce] = nonce
 	return nil
 }
 
 // AddToken adds a particular Token Type to the RATSD Evidence
-// For Now ONLY TSM Report Token in CBOR Format is Supported
 func (e *Evidence) AddToken(key string, evMt string, token []byte) error {
 	node, err := cmw.NewMonad(evMt, token)
 	if err != nil {
@@ -89,6 +89,7 @@ func (e *Evidence) ValidateAndSign(signer cose.Signer) ([]byte, error) {
 	return e.doSign(signer)
 
 }
+
 func (e *Evidence) doSign(signer cose.Signer) ([]byte, error) {
 	alg := signer.Algorithm()
 
@@ -97,15 +98,7 @@ func (e *Evidence) doSign(signer cose.Signer) ([]byte, error) {
 	}
 
 	e.message.Headers.Protected.SetAlgorithm(alg)
-	m := GetratsdCwtMap()
-	if m == nil {
-		return nil, errors.New("missing CWT header")
-	}
-	if err := m.Valid(); err != nil {
-		return nil, fmt.Errorf("invalid cwt header: %w", err)
-	}
-
-	e.message.Headers.Protected.SetCWTClaims(cose.CWTClaims(m))
+	e.message.Headers.Protected.SetCWTClaims(e.Header)
 	if e.SigningCert != nil {
 		// COSE_X509 = bstr / [ 2*certs: bstr ]
 		//
@@ -170,6 +163,29 @@ func (e *Evidence) AddIntermediateCerts(der []byte) error {
 	}
 
 	e.IntermediateCerts = certs
+	return nil
+}
+
+func (e Evidence) Valid() error {
+	if e.Header == nil {
+		return errors.New("no CWT Header in evidence")
+	}
+	_, ok := e.Header[CWTClaimsProfile]
+	if !ok {
+		return errors.New("missing profile")
+	}
+
+	_, ok = e.Header[CWTClaimsNonce]
+	if !ok {
+		return errors.New("missing nonce")
+	}
+
+	if e.token == nil {
+		return errors.New("token does not exist")
+	}
+	if err := e.token.Valid(); err != nil {
+		return fmt.Errorf("invalid CMW Collection %w", err)
+	}
 	return nil
 }
 
