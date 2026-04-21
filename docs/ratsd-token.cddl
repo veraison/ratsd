@@ -36,7 +36,7 @@ uhdrs = {}
 ;;;;;;;;;;;;;;;;;;
 
 ratsd-token-legacy = {
-  "eat_profile": "tag:github.com,2024:veraison/ratsd/v2"
+  "eat_profile": "tag:github.com,2024:veraison/ratsd"
   "eat_nonce": text .size (8..88)
   "cmw": text ; .b64u ratsd-collection
 }
