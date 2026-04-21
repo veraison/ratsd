@@ -1,6 +1,10 @@
 package token
 
-import "github.com/veraison/go-cose"
+import (
+	"errors"
+
+	"github.com/veraison/go-cose"
+)
 
 const (
 	CWTClaimsNonce   int64 = 10
@@ -30,6 +34,15 @@ func (r CWTClaims) AddNonce(n []byte) {
 
 // Check all Mandatory Claims Keys are present or not??
 func (r CWTClaims) Valid() error {
+	_, ok := r[CWTClaimsProfile]
+	if !ok {
+		return errors.New("missing profile")
+	}
+
+	_, ok = r[CWTClaimsNonce]
+	if !ok {
+		return errors.New("missing nonce")
+	}
 
 	return nil
 }
