@@ -11,6 +11,10 @@ import (
 	cose "github.com/veraison/go-cose"
 )
 
+const (
+	ratsdMediaType = "tag:github.com,2025:veraison/ratsd/cmw"
+)
+
 // Evidence is the wrapper around the RATSD token, including the COSE envelope and
 // the underlying CMWCollection
 // nolint: golint
@@ -24,24 +28,30 @@ type Evidence struct {
 type Option func(*Evidence)
 
 func NewEvidence() (*Evidence, error) {
-	mt := "tag:github.com,2025:veraison/ratsd/cmw"
-	ev, err := cmw.NewCollection(mt)
+	ev, err := cmw.NewCollection(ratsdMediaType)
 	msg := cose.NewSign1Message()
 	if err != nil {
 		return nil, err
+	}
+	m := NewratsdCwtMap()
+	m.Addprofile(ratsdMediaType)
+	if m == nil {
+		return nil, errors.New("unable to get cwt headers")
 	}
 
 	return &Evidence{token: ev, message: msg}, nil
 }
 
 func NewEvidenceWithParams() (*Evidence, error) {
-
 	return nil, nil
 }
 
 func (e *Evidence) AddNonce(nonce []byte) error {
-
-	// Insert nonce in the Protected Header
+	m := GetratsdCwtMap()
+	if m == nil {
+		return errors.New("ratsd claims map does not exist")
+	}
+	m.AddNonce(nonce)
 	return nil
 }
 
@@ -87,7 +97,15 @@ func (e *Evidence) doSign(signer cose.Signer) ([]byte, error) {
 	}
 
 	e.message.Headers.Protected.SetAlgorithm(alg)
+	m := GetratsdCwtMap()
+	if m == nil {
+		return nil, errors.New("missing CWT header")
+	}
+	if err := m.Valid(); err != nil {
+		return nil, fmt.Errorf("invalid cwt header: %w", err)
+	}
 
+	e.message.Headers.Protected.SetCWTClaims(cose.CWTClaims(m))
 	if e.SigningCert != nil {
 		// COSE_X509 = bstr / [ 2*certs: bstr ]
 		//
