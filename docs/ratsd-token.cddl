@@ -1,13 +1,31 @@
 start = eat.CBOR-ONLY<ratsd-token> /
         eat.JSON-ONLY<ratsd-token-legacy>
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; RATSD CMW collection ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;
+RATSD-CLAIMS-PROFILE = "tag:github.com,2026:veraison/ratsd/v2"
+RATSD-CLAIMS-MEDIA-TYPE = ("application/eat-ucs+cbor; eat_profile=\"" .cat RATSD-CLAIMS-PROFILE) .cat "\""
+RATSD-CMWCT = "tag:github.com,2025:veraison/ratsd/cmw/v2"
+RATSD-CMWCT-LEGACY = "tag:github.com,2025:veraison/ratsd/cmw"
+
+;;;;;;;;;;;;;;;;;;;;
+;; CMW collection ;;
+;;;;;;;;;;;;;;;;;;;;
 
 ratsd-collection = {
-  "__cmwc_t" => "tag:github.com,2025:veraison/ratsd/cmw"
-  + text => eat.JC<cmw.json-record, cmw.cbor-record>
+  "__cmwc_t" => RATSD-CMWCT
+  "__ratsd" => [
+    RATSD-CLAIMS-MEDIA-TYPE,
+    bytes .cbor ratsd-claims
+  ]
+  + text => cmw.cbor-record
+}
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; legacy CMW collection ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+ratsd-collection-legacy = {
+  "__cmwc_t" => RATSD-CMWCT-LEGACY
+  + text => cmw.json-record
 }
 
 ;;;;;;;;;;;;;;
@@ -21,12 +39,13 @@ ratsd-token = #6.18([
   signature: bytes
 ])
 
+ratsd-claims = #6.601({
+  &(eat_profile: 265) => RATSD-CLAIMS-PROFILE
+  &(eat_nonce: 10) => bytes .size (8..64)
+})
+
 phdrs = {
-  15: {                           ; CWT Claims (RFC 9597)
-    10: bytes .size (8..64)         ; EAT nonce (RFC 9711)
-    265: "tag:github.com,2026:veraison/ratsd/v2"  ; EAT profile (RFC 9711)
-  }
-  33: bytes / [ 2*certs: bytes ]  ; x5chain (RFC 9360)
+  ? &(x5chain: 33) => bytes / [ 2*certs: bytes ]
 }
 
 uhdrs = {}
@@ -38,7 +57,7 @@ uhdrs = {}
 ratsd-token-legacy = {
   "eat_profile": "tag:github.com,2024:veraison/ratsd"
   "eat_nonce": text .size (8..88)
-  "cmw": text ; .b64u ratsd-collection
+  "cmw": text ; .b64u ratsd-collection-legacy
 }
 
 ;;;;;;;;;;;;;;;;
