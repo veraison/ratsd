@@ -1,0 +1,29 @@
+18([
+  / phdr / <<{
+    / x5chain / 33: h'FF'
+  } >>,
+  / uhdr / {},
+  <<{
+      "__cmwc_t": "tag:github.com,2025:veraison/ratsd/cmw/v2",
+
+      "__ratsd": [
+        "application/eat-ucs+cbor; eat_profile=\"tag:github.com,2026:veraison/ratsd/v2\"",
+        << 
+          601({
+            / eat_profile / 265: "tag:github.com,2026:veraison/ratsd/v2",
+            / eat_nonce /   10: h'375FB85D414BF45F43DE0412EA15697D2E9473'
+          })
+        >>],
+
+      "configfs-tsm": [
+        "application/vnd.veraison.tsm-report+cbor",
+        << 
+          {
+            "outblob": h'FF',
+            "provider": "some TEE"
+          }
+        >>
+      ]
+  }>>,
+  / signature / h'FF'
+])
