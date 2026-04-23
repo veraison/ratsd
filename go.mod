@@ -3,6 +3,8 @@ module github.com/veraison/ratsd
 go 1.24.0
 
 require (
+	github.com/NVIDIA/go-nvml v0.13.0-1
+	github.com/confidentsecurity/go-nvtrust v0.2.2
 	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/getkin/kin-openapi v0.131.0
 	github.com/golang/mock v1.6.0
@@ -11,7 +13,7 @@ require (
 	github.com/moogar0880/problems v0.1.1
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/spf13/viper v1.13.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/veraison/cmw v0.1.2-0.20250109140511-d907dcce0c61
 	github.com/veraison/services v0.0.2501
 	go.uber.org/zap v1.23.0
