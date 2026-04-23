@@ -45,6 +45,12 @@ const (
 	ApplicationvndVeraisonConfigfsTsmJson CMWTyp = "application/vnd.veraison.configfs-tsm+json"
 )
 
+// Defines values for ChaResRequestTokenVersion.
+const (
+	N1 ChaResRequestTokenVersion = 1
+	N2 ChaResRequestTokenVersion = 2
+)
+
 // Defines values for EATEatProfile.
 const (
 	TagGithubCom2024Veraisonratsd EATEatProfile = "tag:github.com,2024:veraison/ratsd"
@@ -106,8 +112,12 @@ type CMWTyp string
 type ChaResRequest struct {
 	AttesterSelection    *[]string                    `json:"attester-selection,omitempty"`
 	Nonce                string                       `json:"nonce"`
+	TokenVersion         *ChaResRequestTokenVersion   `json:"token-version,omitempty"`
 	AdditionalProperties map[string]map[string]string `json:"-"`
 }
+
+// ChaResRequestTokenVersion defines model for ChaResRequest.TokenVersion.
+type ChaResRequestTokenVersion int
 
 // EAT defines model for EAT.
 type EAT struct {
@@ -203,6 +213,14 @@ func (a *ChaResRequest) UnmarshalJSON(b []byte) error {
 		delete(object, "nonce")
 	}
 
+	if raw, found := object["token-version"]; found {
+		err = json.Unmarshal(raw, &a.TokenVersion)
+		if err != nil {
+			return fmt.Errorf("error reading 'token-version': %w", err)
+		}
+		delete(object, "token-version")
+	}
+
 	if len(object) != 0 {
 		a.AdditionalProperties = make(map[string]map[string]string)
 		for fieldName, fieldBuf := range object {
@@ -232,6 +250,13 @@ func (a ChaResRequest) MarshalJSON() ([]byte, error) {
 	object["nonce"], err = json.Marshal(a.Nonce)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'nonce': %w", err)
+	}
+
+	if a.TokenVersion != nil {
+		object["token-version"], err = json.Marshal(a.TokenVersion)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'token-version': %w", err)
+		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
@@ -450,24 +475,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -13,6 +13,7 @@ import (
 	"github.com/veraison/cmw"
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
+	"github.com/veraison/ratsd/tokens"
 	"go.uber.org/zap"
 )
 
@@ -23,9 +24,11 @@ const (
 )
 
 type Server struct {
-	logger  *zap.SugaredLogger
-	manager plugin.IManager
-	options string
+	logger      *zap.SugaredLogger
+	manager     plugin.IManager
+	options     string
+	certPath    string
+	certKeyPath string
 }
 
 func responseCodeToHTTP(responseCode uint32) int {
@@ -48,11 +51,27 @@ func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options strin
 	}
 }
 
+func NewServerWithSigner(logger *zap.SugaredLogger, manager plugin.IManager, options, certPath, certKeyPath string) *Server {
+	s := NewServer(logger, manager, options)
+	s.certPath = certPath
+	s.certKeyPath = certKeyPath
+	return s
+}
+
 func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProblem) {
 	s.logger.Error(prob.Detail)
 	w.Header().Set("Content-Type", problems.ProblemMediaType)
 	w.WriteHeader(prob.ProblemStatus())
 	json.NewEncoder(w).Encode(prob)
+}
+
+func responseMediaType(tokenVersion int) string {
+	switch tokenVersion {
+	case tokens.RATSDTokenVersionV2:
+		return fmt.Sprintf(`application/eat-ucs+cbor; eat_profile=%q`, tokens.RATSDV2Profile)
+	default:
+		return fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	}
 }
 
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
@@ -70,7 +89,18 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	respCt := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	payload, _ := io.ReadAll(r.Body)
+
+	tokenVersion := tokens.RATSDTokenVersionLegacy
+	var tokenVersionProbe struct {
+		TokenVersion *int `json:"token-version,omitempty"`
+	}
+	if len(payload) > 0 {
+		if err := json.Unmarshal(payload, &tokenVersionProbe); err == nil && tokenVersionProbe.TokenVersion != nil {
+			tokenVersion = *tokenVersionProbe.TokenVersion
+		}
+	}
+	respCt := responseMediaType(tokenVersion)
 	if param.Accept != nil {
 		s.logger.Info("request media type: ", *(param.Accept))
 		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
@@ -82,7 +112,6 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
-	payload, _ := io.ReadAll(r.Body)
 	requestFields := make(map[string]json.RawMessage)
 	err := json.Unmarshal(payload, &requestFields)
 	if err != nil {
@@ -123,6 +152,33 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 	delete(requestFields, "nonce")
+
+	if rawTokenVersion, ok := requestFields["token-version"]; ok {
+		if err := json.Unmarshal(rawTokenVersion, &tokenVersion); err != nil {
+			errMsg := "fail to retrieve token-version from the request"
+			p := &problems.DefaultProblem{
+				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+				Title:  string(InvalidRequest),
+				Detail: errMsg,
+				Status: http.StatusBadRequest,
+			}
+			s.reportProblem(w, p)
+			return
+		}
+		delete(requestFields, "token-version")
+	}
+	if tokenVersion != tokens.RATSDTokenVersionLegacy &&
+		tokenVersion != tokens.RATSDTokenVersionV2 {
+		errMsg := fmt.Sprintf("unsupported token version %d", tokenVersion)
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
 
 	selectedAttesters := []string{}
 	hasSelection := false
@@ -168,13 +224,19 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 	s.logger.Info("request nonce: ", requestNonce)
-	s.logger.Info("request media type: ", *(param.Accept))
 
-	// Use a map until we finalize ratsd output format
-	eat := make(map[string]interface{})
-	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
-	eat["eat_profile"] = TagGithubCom2024Veraisonratsd
-	eat["eat_nonce"] = requestNonce
+	collectionType := tokens.RATSDCollectionTypeLegacy
+	if tokenVersion == tokens.RATSDTokenVersionV2 {
+		collectionType = tokens.RATSDCollectionTypeV2
+	}
+	collection := cmw.NewCollection(collectionType)
+	if collection == nil {
+		errMsg := "failed to initialize CMW collection"
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		s.reportProblem(w, p)
+		return
+	}
+
 	pl := s.manager.GetPluginList()
 	if len(pl) == 0 {
 		errMsg := "no sub-attester available"
@@ -265,7 +327,12 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 
 		c := cmw.NewMonad(in.ContentType, out.Evidence)
-		collection.AddCollectionItem(pn, c)
+		if err := collection.AddCollectionItem(pn, c); err != nil {
+			errMsg := fmt.Sprintf("failed to add CMW item for %s: %s", pn, err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
 		return true
 	}
 
@@ -288,6 +355,34 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
+	if tokenVersion == tokens.RATSDTokenVersionV2 {
+		if err := tokens.AddClaimsToCollectionV2(collection, nonce); err != nil {
+			p := &problems.DefaultProblem{
+				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+				Title:  string(InvalidRequest),
+				Detail: err.Error(),
+				Status: http.StatusBadRequest,
+			}
+			s.reportProblem(w, p)
+			return
+		}
+
+		token, err := tokens.CreateTokenV2(collection, s.certPath, s.certKeyPath)
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to create token version 2: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
+
+		w.Header().Set("Content-Type", respCt)
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write(token); err != nil {
+			s.logger.Error("failed to write token version 2 response: ", err)
+		}
+		return
+	}
+
 	serialized, err := collection.MarshalJSON()
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
@@ -295,7 +390,11 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		s.reportProblem(w, p)
 		return
 	}
-	eat["cmw"] = serialized
+	eat := map[string]interface{}{
+		"eat_profile": TagGithubCom2024Veraisonratsd,
+		"eat_nonce":   requestNonce,
+		"cmw":         serialized,
+	}
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(eat)
