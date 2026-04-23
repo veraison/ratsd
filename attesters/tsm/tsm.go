@@ -5,6 +5,7 @@ package tsm
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -42,11 +43,12 @@ var (
 
 type TSMPlugin struct{}
 
-func getEvidenceError(e error) *compositor.EvidenceOut {
+func getEvidenceError(e error, statusCode uint32) *compositor.EvidenceOut {
 	return &compositor.EvidenceOut{
 		Status: &compositor.Status{
 			Result: false, Error: e.Error(),
 		},
+		StatusCode: statusCode,
 	}
 }
 
@@ -89,7 +91,7 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 		errMsg := fmt.Errorf(
 			"nonce size of the TSM attester should be %d, got %d",
 			tsmNonceSize, uint32(len(in.Nonce)))
-		return getEvidenceError(errMsg)
+		return getEvidenceError(errMsg, http.StatusBadRequest)
 	}
 
 	for _, format := range supportedFormats {
@@ -104,7 +106,7 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				if err := json.Unmarshal(in.Options, &options); err != nil {
 					errMsg := fmt.Errorf(
 						"failed to parse %s: %v", in.Options, err)
-					return getEvidenceError(errMsg)
+					return getEvidenceError(errMsg, http.StatusBadRequest)
 				}
 			}
 
@@ -113,7 +115,7 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				if err != nil || level < 0 {
 					errMsg := fmt.Errorf("privilege_level %s is invalid",
 						privlevel)
-					return getEvidenceError(errMsg)
+					return getEvidenceError(errMsg, http.StatusBadRequest)
 				}
 				req.Privilege = &report.Privilege{Level: uint(level)}
 			}
@@ -121,13 +123,13 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			client, err := linuxtsm.MakeClient()
 			if err != nil {
 				errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
-				return getEvidenceError(errMsg)
+				return getEvidenceError(errMsg, http.StatusInternalServerError)
 			}
 
 			resp, err := report.Get(client, req)
 			if err != nil {
 				errMsg := fmt.Errorf("failed to get TSM report: %v", err)
-				return getEvidenceError(errMsg)
+				return getEvidenceError(errMsg, http.StatusInternalServerError)
 			}
 
 			out := &tokens.TSMReport{
@@ -161,16 +163,17 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			outEncoded, err := encodeOp()
 			if err != nil {
 				errMsg := fmt.Errorf("failed to encode TSM report as %s: %v", encodeAs, err)
-				return getEvidenceError(errMsg)
+				return getEvidenceError(errMsg, http.StatusInternalServerError)
 			}
 
 			return &compositor.EvidenceOut{
 				Status:   statusSucceeded,
 				Evidence: outEncoded,
+				StatusCode: http.StatusOK,
 			}
 		}
 	}
 
 	errMsg := fmt.Errorf("no supported format in tsm plugin matches the requested format")
-	return getEvidenceError(errMsg)
+	return getEvidenceError(errMsg, http.StatusBadRequest)
 }
