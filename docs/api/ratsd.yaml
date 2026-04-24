@@ -17,7 +17,7 @@ paths:
             application/eat-ucs+json; eat_profile="tag:github.com,2024:veraison/ratsd":
               schema:
                 $ref: '#/components/schemas/EAT'
-            application/eat-ucs+cbor; eat_profile="tag:github.com,2026:veraison/ratsd/v2":
+            application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2":
               schema:
                 type: string
                 format: binary
