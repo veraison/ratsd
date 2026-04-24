@@ -335,7 +335,7 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 
 	var params RatsdCharesParams
 
-	param := fmt.Sprintf(`application/eat-ucs+cbor; eat_profile=%q`, tokens.RATSDV2Profile)
+	param := tokens.RATSDTokenMediaTypeV2
 	params.Accept = &param
 	logger := log.Named("test")
 

@@ -56,7 +56,7 @@ func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProb
 func responseMediaType(tokenVersion int) string {
 	switch tokenVersion {
 	case tokens.RATSDTokenVersionV2:
-		return fmt.Sprintf(`application/eat-ucs+cbor; eat_profile=%q`, tokens.RATSDV2Profile)
+		return tokens.RATSDTokenMediaTypeV2
 	default:
 		return fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	}

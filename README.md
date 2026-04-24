@@ -50,7 +50,7 @@ To request the CBOR token defined as token v2 in `docs/ratsd-token.cddl`, set `"
 ```bash
 $ curl -X POST http://localhost:8895/ratsd/chares \
   -H 'Content-type: application/vnd.veraison.chares+json' \
-  -H 'Accept: application/eat-ucs+cbor; eat_profile="tag:github.com,2026:veraison/ratsd/v2"' \
+  -H 'Accept: application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2"' \
   -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "token-version": 2}' \
   --output ratsd-token-v2.cbor
 ```

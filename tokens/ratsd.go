@@ -29,7 +29,8 @@ const (
 	RATSDCollectionTypeLegacy = "tag:github.com,2025:veraison/ratsd/cmw"
 	RATSDCollectionTypeV2     = "tag:github.com,2025:veraison/ratsd/cmw/v2"
 
-	RATSDClaimsMediaTypeV2 = "application/eat-ucs+cbor; eat_profile=\"tag:github.com,2026:veraison/ratsd/v2\""
+	RATSDTokenMediaTypeV2  = "application/cmw+cbor; cmwct=\"" + RATSDV2Profile + "\""
+	RATSDClaimsMediaTypeV2 = "application/eat-ucs+cbor; eat_profile=\"" + RATSDV2Profile + "\""
 )
 
 const (
