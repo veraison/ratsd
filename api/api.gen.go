@@ -45,6 +45,12 @@ const (
 	ApplicationvndVeraisonConfigfsTsmJson CMWTyp = "application/vnd.veraison.configfs-tsm+json"
 )
 
+// Defines values for ChaResRequestTokenVersion.
+const (
+	N1 ChaResRequestTokenVersion = 1
+	N2 ChaResRequestTokenVersion = 2
+)
+
 // Defines values for EATEatProfile.
 const (
 	TagGithubCom2024Veraisonratsd EATEatProfile = "tag:github.com,2024:veraison/ratsd"
@@ -104,9 +110,13 @@ type CMWTyp string
 
 // ChaResRequest defines model for ChaResRequest.
 type ChaResRequest struct {
-	AttesterSelection json.RawMessage `json:"attester-selection,omitempty"`
-	Nonce             string          `json:"nonce"`
+	AttesterSelection json.RawMessage            `json:"attester-selection,omitempty"`
+	Nonce             string                     `json:"nonce"`
+	TokenVersion      *ChaResRequestTokenVersion `json:"token-version,omitempty"`
 }
+
+// ChaResRequestTokenVersion defines model for ChaResRequest.TokenVersion.
+type ChaResRequestTokenVersion int
 
 // EAT defines model for EAT.
 type EAT struct {
@@ -369,23 +379,24 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7RW32/bNhD+Vwhub5VlNQv2oGEPjhcMfShWJBn6kAbDSTxbzCSSI49uvcD/+0BKsmVb",
-	"rp2iy1Ms3h2/7358xxde6sZohYocz1+4AQsNEtr4a17BHbo7/Mejow/boxTKEg0FC6l4zisEgZYnXEGD",
-	"POfdccJdWWEDwY7WJpw4slIt+Waz6Q/jPTcgukturdU2ArHaoCWJ0UAggaxHAiVcKkegShw9dATkYwRU",
-	"vuH543WWPSW9nfJNgTbYkaQaB2ZcqhXUUjDbwuI7p13w9sPOh2CZLyVVvkhL3SRX2dV1vkIL0mk1tUBO",
-	"5Bjo5V3w07E3CQ+H0qKIgcNpD3JLauemi2csKUCav/94nDxamyFMMKaWJZDUarpSIu0hpqVWC7lcuAm5",
-	"5s2z02qU9QpiHRbaNkA85wU4/Pna25pfQIO3/qPQh712TAKI0BHaicMaywB+D0WEewgg4V8mupGEjaE1",
-	"z8l63CRc6a5bvoFC65uMoRnjdDt7OGaCQH8ZqxeyfmX3jJZDBRxiQvpvjBn50eKC5/yH6W6up92kTUN3",
-	"HDIaojmINsboD9On/mBAgWByOBDbMnSDFoaVcBn/K7SuEULNwFpY86S/ZJRk1JWXc8UJVskAyhiBe1/M",
-	"uuIdszhxT8J1pB1tQju5c5nu0rQViY7kKOIxlH8q8FRpK/9F8f9L4tuLJDGounPMD6B9X1k8E/kbRTFQ",
-	"xtJbSev7UJ02ezcIFu3MUxV+xbIFpyJ+3slARWTabSXVQsd8tmnhd7OHe3a7kgJViWyu604H2G+AjVZs",
-	"9uFdEDu0Ls4Lz9Isfdu2Eiowkuf8pzRLM55wA1RFUG02pmUFtkVpdCuFAl1pZTd6QSnrGtUSmUVntHIY",
-	"bkvZLK5dx4CVWwtQImHeaMWcj/VL2BIVWiB0jCpk2FOQit3OHtjnKZu//8habUx5xGvjsngnAu2AcN4C",
-	"TPZeC4/jE7EzmZ55TWye2gKjoxst1oF3qRWhiik4vbUimHZf9aWEs0q4t2w2+73V7Yk+ubESV1n2FUAI",
-	"9Ob5M/3CBmr666cLOv8TvxxzWCYR6X43PFTYv1JYBa6tMwoUaei266/iNlYXNTavTN7ha+0EKId2hZaV",
-	"2teCKU3MK4E2KJOIndeDFh4Zada/uNxaEXzpwL/97uCPlXUE/qyVOrmvdumemMSOH8rI49PmKRh0U+x8",
-	"0b8SYgctcWSUf0diwGrpiOlFzIrzxWTrx2AFsoaiRqYVo0o61kBZSYUnJvN+eOmrWnhvprYxRpJ70f4b",
-	"btnjJfiqHo5//wUAAP//B2zyTacMAAA=",
+	"H4sIAAAAAAAC/7RWT2/jthP9KgR/v9vSspMGe1DRg5MGxR4WXSQp9pANihE5triVSJUcuusG/u4FKcl/",
+	"ZDlOiq1vFofke29m3vCZS1s31qAhz/Nn3oCDGgld+ndTwh36O/wzoKdP26UMpMSGYoQ2POclgkLHBTdQ",
+	"I895tyy4lyXWEONo3cQVT06bJd9sNv1iuucaVHfJrXPWJSDONuhIYwpQSKCrkYME18YTGImji56AQjoB",
+	"Tah5/ng1mz2JPs6EukAX40hThXthXJsVVFox18Liu027w9sPuz0Ey3ypqQxFJm0tLmeXV/kKHWhvzdQB",
+	"eZVjpJd3h58+eyN4XNQOVTo4rvYgt6R222zxFSVFSDcfPx+LR+tmHyY0TaUlkLZmujIq6yFm0pqFXi78",
+	"hHz97qu3ZpT1ClIeFtbVQDznBXh8fxVcxV9Bg7f7R6Hv19oxCSBCT+gmHiuUEfwBigR3CEDwbxNba8K6",
+	"oTXPyQXcCG5sVy2voSA42T/QTFbofHenwgWEinh+IXpNL8TljpI2hMtYVgP67b1ijMmYHrfzh2MVEOj3",
+	"xtmFrt5YeaOpNBGHmiSG8bj/O1zwnP9vuvOEadel01hZQ0b7aAanjTH6tenTNmhuIJgMm2mbwq5JxVZX",
+	"wQtrK4SYb3AO1lz0l4ySTJ70fKY2U5TYgzJG4D4U8y55xyxO3CO4TbRTTCxFf07pTqatwXQkRxGPofzN",
+	"QKDSOv03qv/eTi9eZadxInjPwh6072upZ07+l4YaKaMMTtP6PmanVe8awaGbByrjv5S2uKlIn3cWUhI1",
+	"7aTTZmGTnq0s/G7+cM9uV1qhkchubNX5APsZsLaGzT99iEbZWw6fZbPsoi0lNNBonvMfslk244I3QGUC",
+	"1aoxlSW4FmVjWxtV6KXTXetFl60qNEtkDn1jjcd4W8bmaWR7BkxuI8AowUJjDfMh5U+wJRp0QOgZlciw",
+	"p6ANu50/sL+m7ObjZ9b6asYTXpcGzQcVaUeENy1AcfDSeBzviF3I9MxLZPPUJhg9XVu1jrylNYQmSXB6",
+	"4iUw7azrUwlnnfBgUG0Oa6ubMb24KROXs9kLgBBoEqR/JwvrfmR7lvrTl5Hyfz8o/+nq8gs/xL4ba9qA",
+	"W4+O5TEAUYXzAIb9N7z9JeXiSEt6HdbkQ4n9O4uV4NtqQ4UqizV/9aJ6jbNFhfUbUzh8b54A5dGt0DFp",
+	"Q6WYscSCUeiiP6pU/z1oFZCRZf2b0a8NwbcO/MV3B3/s7yPw563h6kPPzQ4sLfXdvpk9Pm2eYkBXWj4U",
+	"/Vsl1fESRwzlFyQGrNKemF0kVXwoJtt9DFagKygqZNYwKrVnNchSGzzhD/f7l76pkQ46e3vGiLivmsL7",
+	"s/54FL+phtPvnwAAAP//8agf4mkNAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

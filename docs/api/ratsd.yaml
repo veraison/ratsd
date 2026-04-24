@@ -14,9 +14,13 @@ paths:
         '200':
           description: The request has succeeded.
           content:
-            application/eat+jwt; eat_profile="tag:github.com,2024:veraison/ratsd":
+            application/eat-ucs+json; eat_profile="tag:github.com,2024:veraison/ratsd":
               schema:
                 $ref: '#/components/schemas/EAT'
+            application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2":
+              schema:
+                type: string
+                format: binary
         '400':
           description: The server could not understand the request due to invalid syntax.
           content:
@@ -104,6 +108,12 @@ components:
         nonce:
           type: string
           format: base64url
+        token-version:
+          type: integer
+          enum:
+            - 1
+            - 2
+          default: 1
         attester-selection:
           type: string
           format: json
@@ -192,4 +202,3 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-

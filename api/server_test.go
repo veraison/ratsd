@@ -9,17 +9,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/fxamacker/cbor/v2"
 	"github.com/golang/mock/gomock"
 	"github.com/moogar0880/problems"
 	"github.com/stretchr/testify/assert"
 	"github.com/veraison/cmw"
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
-	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/ratsd/attesters/tsm"
+	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
 
@@ -35,7 +37,7 @@ func TestRatsdSubattesters_valid_requests(t *testing.T) {
 	dm := mock_deps.NewMockIManager(ctrl)
 	dm.EXPECT().GetPluginList().Return([]string{}).Times(1)
 	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm"}).Times(1)
-	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm","tsm-report"}).Times(1)
+	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm", "tsm-report"}).Times(1)
 	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
 	dm.EXPECT().LookupByName("tsm-report").Return(&tsm.TSMPlugin{}, nil).AnyTimes()
 	logger := log.Named("test")
@@ -163,6 +165,10 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 			fmt.Sprintf(`{"nonce": "%s",
 			"attester-selection": {"mock-tsm":{"content-type":"invalid"}}}`, validNonce),
 			"mock-tsm does not support content type invalid"},
+		{"unsupported token version",
+			fmt.Sprintf(`{"nonce": "%s",
+			"token-version": 3}`, validNonce),
+			"unsupported token version 3"},
 	}
 
 	for _, tt := range tests {
@@ -321,4 +327,117 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 		})
 	}
+}
+
+func TestRatsdChares_valid_request_v2(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var params RatsdCharesParams
+
+	param := tokens.RATSDTokenMediaTypeV2
+	params.Accept = &param
+	logger := log.Named("test")
+
+	pluginList := []string{"mock-tsm"}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+
+	s := NewServerWithSigner(
+		logger,
+		dm,
+		"all",
+		filepath.Join("..", "ratsd.crt"),
+		filepath.Join("..", "ratsd.key"),
+	)
+	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
+
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s", "token-version": 2}`, validNonce))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, params)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
+
+	msg := decodeCOSESign1(t, w.Body.Bytes())
+	assert.NotEmpty(t, msg.Signature)
+
+	var protected map[int64]any
+	err := cbor.Unmarshal(msg.Protected, &protected)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-7), protected[1])
+
+	x5chain, ok := protected[33].([]byte)
+	assert.True(t, ok)
+	assert.NotEmpty(t, x5chain)
+
+	collection := &cmw.CMW{}
+	err = collection.UnmarshalCBOR(msg.Payload)
+	assert.NoError(t, err)
+	assert.Equal(t, cmw.KindCollection, collection.GetKind())
+
+	collectionType, err := collection.GetCollectionType()
+	assert.NoError(t, err)
+	assert.Equal(t, tokens.RATSDCollectionTypeV2, collectionType)
+
+	claimsRecord, err := collection.GetCollectionItem("__ratsd")
+	assert.NoError(t, err)
+	assert.Equal(t, tokens.RATSDClaimsMediaTypeV2, claimsRecord.GetMonadType())
+
+	var claimsTag cbor.Tag
+	err = cbor.Unmarshal(claimsRecord.GetMonadValue(), &claimsTag)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(601), claimsTag.Number)
+
+	claimsBytes, err := cbor.Marshal(claimsTag.Content)
+	assert.NoError(t, err)
+
+	var claims map[int]any
+	err = cbor.Unmarshal(claimsBytes, &claims)
+	assert.NoError(t, err)
+	assert.Equal(t, tokens.RATSDV2Profile, claims[265])
+	assert.Equal(t, realNonce, claims[10])
+
+	c, err := collection.GetCollectionItem("mock-tsm")
+	assert.NoError(t, err)
+	assert.Equal(t, cmw.KindMonad, c.GetKind())
+	assert.Equal(t, c.GetMonadType(), "application/vnd.veraison.configfs-tsm+json")
+
+	tsmout := &tokens.TSMReport{}
+	err = tsmout.FromJSON(c.GetMonadValue())
+	assert.NoError(t, err)
+	assert.Equal(t, "fake\n", tsmout.Provider)
+	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
+
+	expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", 0, hex.EncodeToString([]byte(realNonce)))
+	assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
+}
+
+type coseSign1Message struct {
+	_           struct{} `cbor:",toarray"`
+	Protected   []byte
+	Unprotected map[any]any
+	Payload     []byte
+	Signature   []byte
+}
+
+func decodeCOSESign1(t *testing.T, data []byte) *coseSign1Message {
+	t.Helper()
+
+	var tag cbor.Tag
+	err := cbor.Unmarshal(data, &tag)
+	assert.NoError(t, err)
+	assert.Equal(t, uint64(18), tag.Number)
+
+	content, err := cbor.Marshal(tag.Content)
+	assert.NoError(t, err)
+
+	msg := &coseSign1Message{}
+	err = cbor.Unmarshal(content, msg)
+	assert.NoError(t, err)
+
+	return msg
 }
