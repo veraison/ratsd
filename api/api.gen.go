@@ -104,8 +104,9 @@ type CMWTyp string
 
 // ChaResRequest defines model for ChaResRequest.
 type ChaResRequest struct {
-	AttesterSelection json.RawMessage `json:"attester-selection,omitempty"`
-	Nonce             string          `json:"nonce"`
+	AttesterSelection    *[]string                    `json:"attester-selection,omitempty"`
+	Nonce                string                       `json:"nonce"`
+	AdditionalProperties map[string]map[string]string `json:"-"`
 }
 
 // EAT defines model for EAT.
@@ -160,6 +161,87 @@ type RatsdCharesParams struct {
 
 // RatsdCharesApplicationVndVeraisonCharesPlusJSONRequestBody defines body for RatsdChares for application/vnd.veraison.chares+json ContentType.
 type RatsdCharesApplicationVndVeraisonCharesPlusJSONRequestBody = ChaResRequest
+
+// Getter for additional properties for ChaResRequest. Returns the specified
+// element and whether it was found
+func (a ChaResRequest) Get(fieldName string) (value map[string]string, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for ChaResRequest
+func (a *ChaResRequest) Set(fieldName string, value map[string]string) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]map[string]string)
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for ChaResRequest to handle AdditionalProperties
+func (a *ChaResRequest) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["attester-selection"]; found {
+		err = json.Unmarshal(raw, &a.AttesterSelection)
+		if err != nil {
+			return fmt.Errorf("error reading 'attester-selection': %w", err)
+		}
+		delete(object, "attester-selection")
+	}
+
+	if raw, found := object["nonce"]; found {
+		err = json.Unmarshal(raw, &a.Nonce)
+		if err != nil {
+			return fmt.Errorf("error reading 'nonce': %w", err)
+		}
+		delete(object, "nonce")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]map[string]string)
+		for fieldName, fieldBuf := range object {
+			var fieldVal map[string]string
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for ChaResRequest to handle AdditionalProperties
+func (a ChaResRequest) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.AttesterSelection != nil {
+		object["attester-selection"], err = json.Marshal(a.AttesterSelection)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'attester-selection': %w", err)
+		}
+	}
+
+	object["nonce"], err = json.Marshal(a.Nonce)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'nonce': %w", err)
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -369,23 +451,23 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7RW32/bNhD+Vwhub5VlNQv2oGEPjhcMfShWJBn6kAbDSTxbzCSSI49uvcD/+0BKsmVb",
-	"rp2iy1Ms3h2/7358xxde6sZohYocz1+4AQsNEtr4a17BHbo7/Mejow/boxTKEg0FC6l4zisEgZYnXEGD",
-	"POfdccJdWWEDwY7WJpw4slIt+Waz6Q/jPTcgukturdU2ArHaoCWJ0UAggaxHAiVcKkegShw9dATkYwRU",
-	"vuH543WWPSW9nfJNgTbYkaQaB2ZcqhXUUjDbwuI7p13w9sPOh2CZLyVVvkhL3SRX2dV1vkIL0mk1tUBO",
-	"5Bjo5V3w07E3CQ+H0qKIgcNpD3JLauemi2csKUCav/94nDxamyFMMKaWJZDUarpSIu0hpqVWC7lcuAm5",
-	"5s2z02qU9QpiHRbaNkA85wU4/Pna25pfQIO3/qPQh712TAKI0BHaicMaywB+D0WEewgg4V8mupGEjaE1",
-	"z8l63CRc6a5bvoFC65uMoRnjdDt7OGaCQH8ZqxeyfmX3jJZDBRxiQvpvjBn50eKC5/yH6W6up92kTUN3",
-	"HDIaojmINsboD9On/mBAgWByOBDbMnSDFoaVcBn/K7SuEULNwFpY86S/ZJRk1JWXc8UJVskAyhiBe1/M",
-	"uuIdszhxT8J1pB1tQju5c5nu0rQViY7kKOIxlH8q8FRpK/9F8f9L4tuLJDGounPMD6B9X1k8E/kbRTFQ",
-	"xtJbSev7UJ02ezcIFu3MUxV+xbIFpyJ+3slARWTabSXVQsd8tmnhd7OHe3a7kgJViWyu604H2G+AjVZs",
-	"9uFdEDu0Ls4Lz9Isfdu2Eiowkuf8pzRLM55wA1RFUG02pmUFtkVpdCuFAl1pZTd6QSnrGtUSmUVntHIY",
-	"bkvZLK5dx4CVWwtQImHeaMWcj/VL2BIVWiB0jCpk2FOQit3OHtjnKZu//8habUx5xGvjsngnAu2AcN4C",
-	"TPZeC4/jE7EzmZ55TWye2gKjoxst1oF3qRWhiik4vbUimHZf9aWEs0q4t2w2+73V7Yk+ubESV1n2FUAI",
-	"9Ob5M/3CBmr666cLOv8TvxxzWCYR6X43PFTYv1JYBa6tMwoUaei266/iNlYXNTavTN7ha+0EKId2hZaV",
-	"2teCKU3MK4E2KJOIndeDFh4Zada/uNxaEXzpwL/97uCPlXUE/qyVOrmvdumemMSOH8rI49PmKRh0U+x8",
-	"0b8SYgctcWSUf0diwGrpiOlFzIrzxWTrx2AFsoaiRqYVo0o61kBZSYUnJvN+eOmrWnhvprYxRpJ70f4b",
-	"btnjJfiqHo5//wUAAP//B2zyTacMAAA=",
+	"H4sIAAAAAAAC/7RWUW/jNgz+K4K2t3OcXFfswcMe0qwY7uGwou1wD71ioC0mVmdLnkTlLivy3wdJdmIn",
+	"Tpsebn1qLIr8SH78qGde6LrRChVZnj3zBgzUSGjCr0UJt2hv8R+Hlm52RykUBTbkLaTiGS8RBBqecAU1",
+	"8oy3xwm3RYk1eDvaNP7EkpFqxbfbbXcY4lyBaINcG6NNAGJ0g4YkBgOBBLIacZRwqSyBKnD00BKQCx5Q",
+	"uZpnD5ez2WPS2SlX52i8HUmqsGfGpVpDJQUzERbfX9o7jx/2dwhW2UpS6fK00HVyMbu4zNZoQFqtpgbI",
+	"igx9elnr/LTvbcL9oTQogmN/2oHcJbW/pvMnLMhDWnz8dFw82jR9mNA0lSyApFbTtRJpBzEttFrK1dJO",
+	"yNbvnqxWo1mvIfRhqU0NxDOeg8WfL52p+Blp8Hh/FHqfaz4CCCE9SKhuBumc+n6iP70Qw7IAEVpCM7FY",
+	"YeE9BkIT1i+6A2NgwxP+daJrb9zQhmdkHG4TrnRLxG+oTrw7Vpnr+f1xUxHor8bopazeyMHRpipfCTEh",
+	"/TeGKvxocMkz/sN0rw7Tdl6nnmOH4PtoDryNZfRH05X7YMyBYHI4Vi3KpBtXP/KEq/BfrnWFoHiya0sb",
+	"ZDTJoE7Pr/XBWyU9KGMJ3Ll83tLnOIsTcRKuQ9p2QLOXKt2W6ZB7o4jHUP6pwFGpjfwXxf8vrO/PEla/",
+	"G6xlrgft+4rrK56/UVp9ylg4I2lz57sTq3eFYNDMHZX+V2ibv5SHz/uJL4mauPOkWupQz1gWfju/v2PX",
+	"aylQFcgWumqViP0GWGvF5jcfvGSisWFe+Cydpe8jlVBBI3nGf0pn6YwnvAEqA6hYjWlRgokoGx0FVaAt",
+	"jGxHz+ttVaFaITNoG60s+mgpm4flbRmwYmcBSiTMNVox60L/ErZChQYILaMSGXYpSMWu5/fsy5QtPn5i",
+	"UQZTHvCasHI+CJ+2R7iIAJPBm+NhfCL2JtNX3iTbx9hgtHSlxcbnXWhFqOJOObn7Api49bpWwqtKOFhZ",
+	"2yG32pXQFTd04mI2ewEQAr17+kK/sJ6a/vr5DOZ/5udj9sskIB2y4b7E7q3DSrCxzyhQpJ5tly/ibozO",
+	"K6zfWLzDN98JUBbNGg0rtKsEU5qYUwKNVyYRmNeBFg4Zada92+xGEXxtwb//7uCPlXUE/jxKnRyqXToQ",
+	"k8D4vow8PG4fvUE7xdbl3TslMGiFI6P8OxIDVklLTC9DVazLJ7t7DNYgK8grZFoxKqVlNRSlVHhiMu/6",
+	"Qd9E4cFM7XyMFPes/dffssdL8E0cDn//BQAA//9UTWAB7QwAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
