@@ -99,15 +99,19 @@ components:
       type: object
       required:
         - nonce
-        - attester-selection
       properties:
         nonce:
           type: string
           format: base64url
         attester-selection:
-          type: string
-          format: json
+          type: array
+          items:
+            type: string
           x-omitempty: true
+      additionalProperties:
+        type: object
+        additionalProperties:
+          type: string
     EAT:
       type: object
       required:
@@ -192,4 +196,3 @@ components:
     BearerAuth:
       type: http
       scheme: bearer
-
