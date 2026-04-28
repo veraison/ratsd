@@ -55,7 +55,7 @@ $ curl http://localhost:8895/ratsd/subattesters
 
 Ratsd currently supports the Trusted Secure Module `tsm` attester. You can specify the `privilege_level` for configfs-TSM in the query.
 ```bash
-curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", tsm-report:{"privilege_level": "$level"}}' # Replace $level with a number from 0 to 3
+curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "attester-selection":{"tsm-report":{"privilege_level": "$level"}}}' # Replace $level with a number greater than 0
 ```
 ### Get evidence from the selected attester only
 
