@@ -113,7 +113,9 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	delete(requestFields, "nonce")
 
 	selectedAttesters := []string{}
-	if rawSelection, hasSelection := requestFields["attester-selection"]; hasSelection {
+	hasSelection := false
+	if rawSelection, ok := requestFields["attester-selection"]; ok {
+		hasSelection = true
 		if err := json.Unmarshal(rawSelection, &selectedAttesters); err != nil {
 			errMsg := fmt.Sprintf(
 				"failed to parse attester selection: %s", err.Error())
@@ -256,7 +258,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	}
 
 	attestersToQuery := pl
-	if s.options == "selected" {
+	if hasSelection {
 		seen := make(map[string]struct{}, len(selectedAttesters))
 		attestersToQuery = make([]string, 0, len(selectedAttesters))
 		for _, pn := range selectedAttesters {
