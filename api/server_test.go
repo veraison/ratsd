@@ -18,8 +18,8 @@ import (
 	"github.com/veraison/cmw"
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
-	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/ratsd/attesters/tsm"
+	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
 
@@ -35,7 +35,7 @@ func TestRatsdSubattesters_valid_requests(t *testing.T) {
 	dm := mock_deps.NewMockIManager(ctrl)
 	dm.EXPECT().GetPluginList().Return([]string{}).Times(1)
 	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm"}).Times(1)
-	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm","tsm-report"}).Times(1)
+	dm.EXPECT().GetPluginList().Return([]string{"mock-tsm", "tsm-report"}).Times(1)
 	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
 	dm.EXPECT().LookupByName("tsm-report").Return(&tsm.TSMPlugin{}, nil).AnyTimes()
 	logger := log.Named("test")
@@ -151,17 +151,23 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 			fmt.Sprintf(`{"nonce": "%s",
 		"attester-selection": "attester-slection"}`, validNonce),
 			"failed to parse attester selection: json: cannot unmarshal string into" +
-				` Go value of type map[string]json.RawMessage`},
+				` Go value of type []string`},
 		{"no attester specified in selected mode", fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
+			"attester-selection must contain at least one attester"},
+		{"empty attester selection in selected mode",
+			fmt.Sprintf(`{"nonce": "%s",
+			"attester-selection": []}`, validNonce),
 			"attester-selection must contain at least one attester"},
 		{"invalid attester options",
 			fmt.Sprintf(`{"nonce": "%s",
-			"attester-selection": {"mock-tsm":"invalid"}}`, validNonce),
+			"attester-selection": ["mock-tsm"],
+			"mock-tsm":"invalid"}`, validNonce),
 			"failed to parse options for mock-tsm: json: cannot unmarshal string into" +
 				` Go value of type map[string]string`},
 		{"request content type unavailable",
 			fmt.Sprintf(`{"nonce": "%s",
-			"attester-selection": {"mock-tsm":{"content-type":"invalid"}}}`, validNonce),
+			"attester-selection": ["mock-tsm"],
+			"mock-tsm":{"content-type":"invalid"}}`, validNonce),
 			"mock-tsm does not support content type invalid"},
 	}
 
@@ -257,19 +263,15 @@ func TestRatsdChares_valid_request(t *testing.T) {
 		{
 			"with null as params",
 			fmt.Sprintf(`{"nonce": "%s",
-				"attester-selection":{
-					"mock-tsm": null
-				}
+				"mock-tsm": null
 			}`, validNonce),
 			0,
 		},
 		{
 			"with params",
 			fmt.Sprintf(`{"nonce": "%s",
-				"attester-selection":{
-					"mock-tsm":{
-						"privilege_level":"1"
-					}
+				"mock-tsm":{
+					"privilege_level":"1"
 				}
 			}`, validNonce),
 			1,
@@ -321,4 +323,96 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 		})
 	}
+}
+
+func TestRatsdChares_valid_request_selected_attesters(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var params RatsdCharesParams
+
+	param := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	params.Accept = &param
+	logger := log.Named("test")
+
+	pluginList := []string{"mock-tsm", "other-tsm"}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+
+	s := NewServer(logger, dm, "selected")
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+		"attester-selection": ["mock-tsm"]}`, validNonce))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, params)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
+
+	var out map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &out)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "cmw")
+
+	data, err := base64.StdEncoding.DecodeString(out["cmw"])
+	assert.NoError(t, err)
+
+	collection := &cmw.CMW{}
+	err = collection.UnmarshalJSON([]byte(data))
+	assert.NoError(t, err)
+	assert.Equal(t, cmw.KindCollection, collection.GetKind())
+
+	_, err = collection.GetCollectionItem("mock-tsm")
+	assert.NoError(t, err)
+
+	_, err = collection.GetCollectionItem("other-tsm")
+	assert.Error(t, err)
+}
+
+func TestRatsdChares_valid_request_selected_attesters_in_all_mode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var params RatsdCharesParams
+
+	param := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	params.Accept = &param
+	logger := log.Named("test")
+
+	pluginList := []string{"mock-tsm", "other-tsm"}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+
+	s := NewServer(logger, dm, "all")
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+		"attester-selection": ["mock-tsm"]}`, validNonce))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, params)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
+
+	var out map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &out)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "cmw")
+
+	data, err := base64.StdEncoding.DecodeString(out["cmw"])
+	assert.NoError(t, err)
+
+	collection := &cmw.CMW{}
+	err = collection.UnmarshalJSON([]byte(data))
+	assert.NoError(t, err)
+	assert.Equal(t, cmw.KindCollection, collection.GetKind())
+
+	_, err = collection.GetCollectionItem("mock-tsm")
+	assert.NoError(t, err)
+
+	_, err = collection.GetCollectionItem("other-tsm")
+	assert.Error(t, err)
 }
