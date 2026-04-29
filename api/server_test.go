@@ -370,3 +370,49 @@ func TestRatsdChares_valid_request_selected_attesters(t *testing.T) {
 	_, err = collection.GetCollectionItem("other-tsm")
 	assert.Error(t, err)
 }
+
+func TestRatsdChares_valid_request_selected_attesters_in_all_mode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var params RatsdCharesParams
+
+	param := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	params.Accept = &param
+	logger := log.Named("test")
+
+	pluginList := []string{"mock-tsm", "other-tsm"}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+
+	s := NewServer(logger, dm, "all")
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+		"attester-selection": ["mock-tsm"]}`, validNonce))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, params)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
+
+	var out map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &out)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "cmw")
+
+	data, err := base64.StdEncoding.DecodeString(out["cmw"])
+	assert.NoError(t, err)
+
+	collection := &cmw.CMW{}
+	err = collection.UnmarshalJSON([]byte(data))
+	assert.NoError(t, err)
+	assert.Equal(t, cmw.KindCollection, collection.GetKind())
+
+	_, err = collection.GetCollectionItem("mock-tsm")
+	assert.NoError(t, err)
+
+	_, err = collection.GetCollectionItem("other-tsm")
+	assert.Error(t, err)
+}
