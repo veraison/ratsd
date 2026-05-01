@@ -145,6 +145,8 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 
 	s := NewServer(logger, dm, "selected")
 	tests := []struct{ name, body, msg string }{
+		{"invalid json", `{"nonce": "MIDBNH28iioisjPy"`,
+			"unable to deserialize JSON request body"},
 		{"missing nonce", `{"noncee": "MIDBNH28iioisjPy"}`,
 			"fail to retrieve nonce from the request"},
 		{"invalid attester selection",

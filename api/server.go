@@ -74,7 +74,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	requestFields := make(map[string]json.RawMessage)
 	err := json.Unmarshal(payload, &requestFields)
 	if err != nil {
-		errMsg := "fail to retrieve nonce from the request"
+		errMsg := "unable to deserialize JSON request body"
 		p := &problems.DefaultProblem{
 			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
 			Title:  string(InvalidRequest),
