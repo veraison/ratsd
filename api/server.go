@@ -10,7 +10,6 @@ import (
 	"net/http"
 
 	"github.com/moogar0880/problems"
-	"github.com/veraison/cmw"
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
 	"github.com/veraison/ratsd/tokens"
@@ -65,15 +64,6 @@ func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProb
 	json.NewEncoder(w).Encode(prob)
 }
 
-func responseMediaType(tokenVersion int) string {
-	switch tokenVersion {
-	case tokens.RATSDTokenVersionV2:
-		return tokens.RATSDTokenMediaTypeV2
-	default:
-		return fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
-	}
-}
-
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
 	// Check if content type matches the expectation
 	ct := r.Header.Get("Content-Type")
@@ -100,7 +90,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			tokenVersion = *tokenVersionProbe.TokenVersion
 		}
 	}
-	respCt := responseMediaType(tokenVersion)
+	respCt := tokens.ResponseMediaType(tokenVersion)
 	if param.Accept != nil {
 		s.logger.Info("request media type: ", *(param.Accept))
 		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
@@ -225,14 +215,29 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	}
 	s.logger.Info("request nonce: ", requestNonce)
 
-	collectionType := tokens.RATSDCollectionTypeLegacy
+	evidenceOptions := []tokens.EvidenceOption{}
 	if tokenVersion == tokens.RATSDTokenVersionV2 {
-		collectionType = tokens.RATSDCollectionTypeV2
+		evidenceOptions = append(evidenceOptions, tokens.WithSignerPaths(s.certPath, s.certKeyPath))
 	}
-	collection := cmw.NewCollection(collectionType)
-	if collection == nil {
-		errMsg := "failed to initialize CMW collection"
-		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+
+	evidence, err := tokens.NewEvidence(tokenVersion, evidenceOptions...)
+	if err != nil {
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: err.Error(),
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
+	if err := evidence.AddNonce(nonce); err != nil {
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: err.Error(),
+			Status: http.StatusBadRequest,
+		}
 		s.reportProblem(w, p)
 		return
 	}
@@ -326,9 +331,8 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		c := cmw.NewMonad(in.ContentType, out.Evidence)
-		if err := collection.AddCollectionItem(pn, c); err != nil {
-			errMsg := fmt.Sprintf("failed to add CMW item for %s: %s", pn, err.Error())
+		if err := evidence.AddToken(pn, in.ContentType, out.Evidence); err != nil {
+			errMsg := err.Error()
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
 			return false
@@ -355,49 +359,25 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
-	if tokenVersion == tokens.RATSDTokenVersionV2 {
-		if err := tokens.AddClaimsToCollectionV2(collection, nonce); err != nil {
-			p := &problems.DefaultProblem{
-				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-				Title:  string(InvalidRequest),
-				Detail: err.Error(),
-				Status: http.StatusBadRequest,
-			}
-			s.reportProblem(w, p)
-			return
-		}
-
-		token, err := tokens.CreateTokenV2(collection, s.certPath, s.certKeyPath)
-		if err != nil {
+	token, err := evidence.Marshal()
+	if err != nil {
+		if tokenVersion == tokens.RATSDTokenVersionV2 {
 			errMsg := fmt.Sprintf("failed to create token version 2: %s", err.Error())
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
 			return
 		}
 
-		w.Header().Set("Content-Type", respCt)
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write(token); err != nil {
-			s.logger.Error("failed to write token version 2 response: ", err)
-		}
-		return
-	}
-
-	serialized, err := collection.MarshalJSON()
-	if err != nil {
-		errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
+		errMsg := fmt.Sprintf("failed to serialize legacy token: %s", err.Error())
 		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 		s.reportProblem(w, p)
 		return
 	}
-	eat := map[string]interface{}{
-		"eat_profile": TagGithubCom2024Veraisonratsd,
-		"eat_nonce":   requestNonce,
-		"cmw":         serialized,
-	}
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(eat)
+	if _, err := w.Write(token); err != nil {
+		s.logger.Error("failed to write token response: ", err)
+	}
 }
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {

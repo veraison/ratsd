@@ -336,6 +336,8 @@ github.com/ugorji/go/codec v1.2.11 h1:BMaWp1Bb6fHwEtbplGBGJ498wD+LKlNSl25MjdZY4d
 github.com/ugorji/go/codec v1.2.11/go.mod h1:UNopzCgEMSXjBc6AOMqYvWC1ktqTAfzJZUZgYf6w6lg=
 github.com/veraison/cmw v0.1.2-0.20250109140511-d907dcce0c61 h1:0m/q63xDHuFmfode99GCC7F9CHAREpS3QSa6uqayGFU=
 github.com/veraison/cmw v0.1.2-0.20250109140511-d907dcce0c61/go.mod h1:OiYKk1t6/Fmmg30ZpSMzi4nKr5kt3374sNTkgxC5BDs=
+github.com/veraison/go-cose v1.3.0 h1:2/H5w8kdSpQJyVtIhx8gmwPJ2uSz1PkyWFx0idbd7rk=
+github.com/veraison/go-cose v1.3.0/go.mod h1:df09OV91aHoQWLmy1KsDdYiagtXgyAwAl8vFeFn1gMc=
 github.com/veraison/services v0.0.2501 h1:tK4a92RvceURIlT0pEkz3fU0TpaZ9jbcWqkPRkMsZXY=
 github.com/veraison/services v0.0.2501/go.mod h1:snBdw93xJ4j9sSrYueT3QlAB8oWGePwkq7H+kYf/lLc=
 github.com/vmware-labs/yaml-jsonpath v0.3.2 h1:/5QKeCBGdsInyDCyVNLbXyilb61MXGi9NP674f9Hobk=

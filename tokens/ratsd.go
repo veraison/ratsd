@@ -17,6 +17,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/cmw"
+	cose "github.com/veraison/go-cose"
 )
 
 const (
@@ -34,12 +35,9 @@ const (
 )
 
 const (
-	cborTagEATClaims  uint64 = 601
-	cborTagCOSESign1  uint64 = 18
-	coseHeaderAlg     int64  = 1
-	coseHeaderX5Chain int64  = 33
-	eatClaimNonce     int    = 10
-	eatClaimProfile   int    = 265
+	cborTagEATClaims uint64 = 601
+	eatClaimNonce    int    = 10
+	eatClaimProfile  int    = 265
 )
 
 // AddClaimsToCollectionV2 inserts the ratsd claims record required by token v2.
@@ -78,99 +76,45 @@ func CreateTokenV2(collection *cmw.CMW, certPath, keyPath string) ([]byte, error
 		return nil, errors.New("token version 2 requires cert and cert-key configuration")
 	}
 
-	payload, err := collection.MarshalCBOR()
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize CMW collection as CBOR: %w", err)
-	}
-
-	x5chain, leafCert, err := loadCertificateChain(certPath)
+	signer, leafCert, intermediateCerts, err := loadSignerFromPaths(certPath, keyPath)
 	if err != nil {
 		return nil, err
 	}
 
-	key, err := loadPrivateKey(keyPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureKeyMatchesCertificate(key, leafCert); err != nil {
-		return nil, err
-	}
-
-	alg, hash, err := selectSigningAlgorithm(key)
-	if err != nil {
-		return nil, err
-	}
-
-	protected, err := cbor.Marshal(map[int64]any{
-		coseHeaderAlg:     alg,
-		coseHeaderX5Chain: x5chain,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize protected headers: %w", err)
-	}
-
-	toBeSigned, err := cbor.Marshal([]any{
-		"Signature1",
-		protected,
-		[]byte{},
-		payload,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to serialize Sig_structure: %w", err)
-	}
-
-	signature, err := signCOSEPayload(key, hash, toBeSigned)
-	if err != nil {
-		return nil, err
-	}
-
-	return cbor.Marshal(cbor.Tag{
-		Number: cborTagCOSESign1,
-		Content: []any{
-			protected,
-			map[any]any{},
-			payload,
-			signature,
-		},
-	})
+	return signCollectionV2(collection, signer, leafCert, intermediateCerts)
 }
 
-func loadCertificateChain(path string) (any, *x509.Certificate, error) {
+func loadCertificateChain(path string) ([]*x509.Certificate, error) {
 	pemData, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read certificate %q: %w", path, err)
+		return nil, fmt.Errorf("failed to read certificate %q: %w", path, err)
 	}
 
-	var chain [][]byte
+	var chain []*x509.Certificate
 	rest := pemData
 	for {
 		block, remainder := pem.Decode(rest)
 		if block == nil {
 			if len(bytes.TrimSpace(rest)) != 0 {
-				return nil, nil, fmt.Errorf("failed to parse certificate %q", path)
+				return nil, fmt.Errorf("failed to parse certificate %q", path)
 			}
 			break
 		}
 		rest = remainder
 		if block.Type == "CERTIFICATE" {
-			chain = append(chain, block.Bytes)
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse certificate from %q: %w", path, err)
+			}
+			chain = append(chain, cert)
 		}
 	}
 
 	if len(chain) == 0 {
-		return nil, nil, fmt.Errorf("no certificate found in %q", path)
+		return nil, fmt.Errorf("no certificate found in %q", path)
 	}
 
-	leaf, err := x509.ParseCertificate(chain[0])
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse leaf certificate from %q: %w", path, err)
-	}
-
-	if len(chain) == 1 {
-		return chain[0], leaf, nil
-	}
-
-	return chain, leaf, nil
+	return chain, nil
 }
 
 func loadPrivateKey(path string) (crypto.Signer, error) {
@@ -232,67 +176,102 @@ func ensureKeyMatchesCertificate(key crypto.Signer, cert *x509.Certificate) erro
 	return nil
 }
 
-func selectSigningAlgorithm(key crypto.Signer) (int64, crypto.Hash, error) {
+func selectSigningAlgorithm(key crypto.Signer) (cose.Algorithm, error) {
 	switch k := key.(type) {
 	case *ecdsa.PrivateKey:
 		switch k.Curve.Params().BitSize {
 		case 256:
-			return -7, crypto.SHA256, nil
+			return cose.AlgorithmES256, nil
 		case 384:
-			return -35, crypto.SHA384, nil
+			return cose.AlgorithmES384, nil
 		case 521:
-			return -36, crypto.SHA512, nil
+			return cose.AlgorithmES512, nil
 		default:
-			return 0, 0, fmt.Errorf("unsupported ECDSA curve size %d", k.Curve.Params().BitSize)
+			return 0, fmt.Errorf("unsupported ECDSA curve size %d", k.Curve.Params().BitSize)
 		}
 	case *rsa.PrivateKey:
 		switch {
 		case k.N.BitLen() >= 4096:
-			return -39, crypto.SHA512, nil
+			return cose.AlgorithmPS512, nil
 		case k.N.BitLen() >= 3072:
-			return -38, crypto.SHA384, nil
+			return cose.AlgorithmPS384, nil
 		case k.N.BitLen() >= 2048:
-			return -37, crypto.SHA256, nil
+			return cose.AlgorithmPS256, nil
 		default:
-			return 0, 0, fmt.Errorf("RSA key must be at least 2048 bits, got %d", k.N.BitLen())
+			return 0, fmt.Errorf("RSA key must be at least 2048 bits, got %d", k.N.BitLen())
 		}
 	default:
-		return 0, 0, fmt.Errorf("unsupported private key type %T", key)
+		return 0, fmt.Errorf("unsupported private key type %T", key)
 	}
 }
 
-func signCOSEPayload(key crypto.Signer, hash crypto.Hash, payload []byte) ([]byte, error) {
-	if !hash.Available() {
-		return nil, fmt.Errorf("hash %v is not available", hash)
+func loadSignerFromPaths(certPath, keyPath string) (cose.Signer, *x509.Certificate, []*x509.Certificate, error) {
+	chain, err := loadCertificateChain(certPath)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
-	hasher := hash.New()
-	if _, err := hasher.Write(payload); err != nil {
-		return nil, fmt.Errorf("failed to hash COSE payload: %w", err)
+	key, err := loadPrivateKey(keyPath)
+	if err != nil {
+		return nil, nil, nil, err
 	}
-	digest := hasher.Sum(nil)
+	if err := ensureKeyMatchesCertificate(key, chain[0]); err != nil {
+		return nil, nil, nil, err
+	}
 
-	switch k := key.(type) {
-	case *ecdsa.PrivateKey:
-		r, s, err := ecdsa.Sign(rand.Reader, k, digest)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign token with ECDSA: %w", err)
-		}
-		size := (k.Curve.Params().BitSize + 7) / 8
-		signature := make([]byte, size*2)
-		r.FillBytes(signature[:size])
-		s.FillBytes(signature[size:])
-		return signature, nil
-	case *rsa.PrivateKey:
-		sig, err := rsa.SignPSS(rand.Reader, k, hash, digest, &rsa.PSSOptions{
-			SaltLength: rsa.PSSSaltLengthEqualsHash,
-			Hash:       hash,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign token with RSA-PSS: %w", err)
-		}
-		return sig, nil
-	default:
-		return nil, fmt.Errorf("unsupported private key type %T", key)
+	alg, err := selectSigningAlgorithm(key)
+	if err != nil {
+		return nil, nil, nil, err
 	}
+
+	signer, err := cose.NewSigner(alg, key)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create COSE signer: %w", err)
+	}
+
+	return signer, chain[0], chain[1:], nil
+}
+
+func signCollectionV2(collection *cmw.CMW, signer cose.Signer, signingCert *x509.Certificate, intermediateCerts []*x509.Certificate) ([]byte, error) {
+	if collection == nil {
+		return nil, errors.New("nil CMW collection")
+	}
+	if signer == nil {
+		return nil, errors.New("nil COSE signer")
+	}
+
+	payload, err := collection.MarshalCBOR()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize CMW collection as CBOR: %w", err)
+	}
+
+	msg := cose.NewSign1Message()
+	msg.Payload = payload
+	msg.Headers.Protected.SetAlgorithm(signer.Algorithm())
+
+	if signingCert != nil {
+		if len(intermediateCerts) == 0 {
+			msg.Headers.Protected[cose.HeaderLabelX5Chain] = signingCert.Raw
+		} else {
+			chain := make([][]byte, 0, len(intermediateCerts)+1)
+			chain = append(chain, signingCert.Raw)
+			for _, cert := range intermediateCerts {
+				chain = append(chain, cert.Raw)
+			}
+			msg.Headers.Protected[cose.HeaderLabelX5Chain] = chain
+		}
+	} else if len(intermediateCerts) > 0 {
+		return nil, errors.New("intermediate certificates supplied but no signing certificate")
+	}
+
+	if err := msg.Sign(rand.Reader, nil, signer); err != nil {
+		return nil, fmt.Errorf("failed to sign CMW collection: %w", err)
+	}
+
+	token, err := msg.MarshalCBOR()
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize COSE_Sign1 token: %w", err)
+	}
+
+	return token, nil
 }
