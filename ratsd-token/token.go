@@ -1,6 +1,7 @@
 package token
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
@@ -12,19 +13,18 @@ import (
 )
 
 const (
-	ratsdMediaType         = "tag:github.com,2025:veraison/ratsd/cmw"
+	ratsdMediaType         = "tag:github.com,2025:veraison/ratsd/cmw/v2"
 	CWTClaimsNonce   int64 = 10
 	CWTClaimsProfile int64 = 265
+	ContentType            = "application/veraison+ratsd/cmw"
 )
-
-const ()
 
 // Evidence is the wrapper around the RATSD token, including the COSE envelope and
 // the underlying CMWCollection
 // nolint: golint
 type Evidence struct {
-	token             *cmw.CMW
-	Header            cose.CWTClaims
+	collection        *cmw.CMW
+	claims            *Claims
 	SigningCert       *x509.Certificate
 	IntermediateCerts []*x509.Certificate
 	message           *cose.Sign1Message
@@ -38,21 +38,18 @@ func NewEvidence() (*Evidence, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := make(cose.CWTClaims)
-	h[CWTClaimsProfile] = ratsdMediaType
 
-	return &Evidence{token: ev, Header: h, message: msg}, nil
-}
-
-func NewEvidenceWithParams() (*Evidence, error) {
-	return nil, nil
+	claims := newClaims()
+	return &Evidence{collection: ev, claims: claims, message: msg}, nil
 }
 
 func (e *Evidence) AddNonce(nonce []byte) error {
-	if e.Header == nil {
-		return errors.New("no header present in the Evidence")
+	if e.claims != nil {
+		return fmt.Errorf("claims do not exist")
 	}
-	e.Header[CWTClaimsNonce] = nonce
+	if err := e.claims.SetNonce(nonce); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -62,7 +59,7 @@ func (e *Evidence) AddToken(key string, evMt string, token []byte) error {
 	if err != nil {
 		return fmt.Errorf("unable to add the token %w", err)
 	}
-	if err := e.token.AddCollectionItem(key, node); err != nil {
+	if err := e.collection.AddCollectionItem(key, node); err != nil {
 		return fmt.Errorf("unable to add the collection item %w", err)
 	}
 
@@ -74,14 +71,14 @@ func (e *Evidence) AddToken(key string, evMt string, token []byte) error {
 func (e *Evidence) ValidateAndSign(signer cose.Signer) ([]byte, error) {
 
 	var err error
-	if e.token == nil {
-		return nil, errors.New("token does not exist")
+	if e.collection == nil {
+		return nil, errors.New("collection does not exist")
 	}
-	if err := e.token.Valid(); err != nil {
+	if err := e.collection.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid CMW Collection %w", err)
 	}
 
-	e.message.Payload, err = e.token.MarshalCBOR()
+	e.message.Payload, err = e.collection.MarshalCBOR()
 	if err != nil {
 		return nil, err
 	}
@@ -167,23 +164,11 @@ func (e *Evidence) AddIntermediateCerts(der []byte) error {
 }
 
 func (e Evidence) Valid() error {
-	if e.Header == nil {
-		return errors.New("no CWT Header in evidence")
-	}
-	_, ok := e.Header[CWTClaimsProfile]
-	if !ok {
-		return errors.New("missing profile")
-	}
 
-	_, ok = e.Header[CWTClaimsNonce]
-	if !ok {
-		return errors.New("missing nonce")
+	if e.collection == nil {
+		return errors.New("collection does not exist")
 	}
-
-	if e.token == nil {
-		return errors.New("token does not exist")
-	}
-	if err := e.token.Valid(); err != nil {
+	if err := e.collection.Valid(); err != nil {
 		return fmt.Errorf("invalid CMW Collection %w", err)
 	}
 	return nil
@@ -192,6 +177,97 @@ func (e Evidence) Valid() error {
 // Verify
 
 // UnMarshal
+func (e *Evidence) UnmarshalCOSE(cwt []byte) error {
+	var err error
+
+	e.message = cose.NewSign1Message()
+
+	if err = e.message.UnmarshalCBOR(cwt); err != nil {
+		return fmt.Errorf("failed CBOR decoding for CWT: %w", err)
+	}
+	payload := e.message.Payload
+	e.collection = &cmw.CMW{}
+	if err := e.collection.UnmarshalCBOR(payload); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (e *Evidence) processHdrs() error {
+
+	var hdr = e.message.Headers
+
+	if hdr.Protected == nil {
+		return errors.New("missing mandatory protected header")
+	}
+
+	if v, ok := hdr.Protected[cose.HeaderLabelContentType]; ok {
+		if v != ContentType {
+			return fmt.Errorf("expecting content type %q, got %q instead", ContentType, v)
+		}
+	} else {
+		return errors.New("missing mandatory content type")
+	}
+
+	// Process optional x5chain
+	if v, ok := hdr.Protected[cose.HeaderLabelX5Chain]; ok {
+		if err := e.extractX5Chain(v); err != nil {
+			return err
+		}
+	}
+
+	_, ok := hdr.Protected[CWTClaimsProfile]
+	if !ok {
+		return errors.New("missing profile")
+	}
+
+	_, ok = hdr.Protected[CWTClaimsNonce]
+	if !ok {
+		return errors.New("missing nonce")
+	}
+
+	return nil
+
+}
+
+func (e *Evidence) extractX5Chain(x5chain interface{}) error {
+	var buf bytes.Buffer
+
+	switch t := x5chain.(type) {
+	case []interface{}:
+		for i, elem := range t {
+			cert, ok := elem.([]byte)
+			if !ok {
+				return fmt.Errorf("accessing x5chain[%d]: got %T, want []byte", i, elem)
+			}
+
+			switch i {
+			case 0:
+				if err := e.AddSigningCert(cert); err != nil {
+					return fmt.Errorf("decoding x5chain: %w", err)
+				}
+			default:
+				buf.Write(cert)
+			}
+		}
+
+		if buf.Len() > 0 {
+			if err := e.AddIntermediateCerts(buf.Bytes()); err != nil {
+				return fmt.Errorf("decoding x5chain: %w", err)
+			}
+		}
+	case []byte:
+		if err := e.AddSigningCert(t); err != nil {
+			return fmt.Errorf("decoding x5chain: %w", err)
+		}
+	default:
+		return fmt.Errorf("decoding x5chain: got %T, want []interface{} or []byte", t)
+	}
+
+	return nil
+
+}
 
 // Consider X5Chain, signing Certificate, One or More..
 
