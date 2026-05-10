@@ -77,7 +77,11 @@ func (e *Evidence) ValidateAndSign(signer cose.Signer) ([]byte, error) {
 	if err := e.collection.Valid(); err != nil {
 		return nil, fmt.Errorf("invalid CMW Collection %w", err)
 	}
-
+	// Check if Lead Attester UCCS Exists
+	// If Not Add UCCS Monad
+	if err := e.insertLeadAttesterMonad(); err != nil {
+		return nil, err
+	}
 	e.message.Payload, err = e.collection.MarshalCBOR()
 	if err != nil {
 		return nil, err
@@ -95,7 +99,7 @@ func (e *Evidence) doSign(signer cose.Signer) ([]byte, error) {
 	}
 
 	e.message.Headers.Protected.SetAlgorithm(alg)
-	e.message.Headers.Protected.SetCWTClaims(e.Header)
+
 	if e.SigningCert != nil {
 		// COSE_X509 = bstr / [ 2*certs: bstr ]
 		//
@@ -174,7 +178,20 @@ func (e Evidence) Valid() error {
 	return nil
 }
 
-// Verify
+func (e *Evidence) insertLeadAttesterMonad() error {
+	if e.claims != nil {
+		// report error
+	}
+	if err := e.claims.Valid(); err != nil {
+		return err
+	}
+	b, err := MarshalUCCS(e.claims)
+	if err != nil {
+		return err
+	}
+	e.AddToken("__ratsd", "application/eat-ucs+cbor; eat_profile=\"tag:github.com,2026:veraison/ratsd/v2\"", b)
+	return nil
+}
 
 // UnMarshal
 func (e *Evidence) UnmarshalCOSE(cwt []byte) error {
