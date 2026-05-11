@@ -42,7 +42,16 @@ ratsd-token = #6.18([
 ratsd-claims = #6.601({
   &(eat_profile: 265) => RATSD-CLAIMS-PROFILE
   &(eat_nonce: 10) => bytes .size (8..64)
+  ? (
+    &(nonce_adjust_function: -65537) => nonce_adjust_function_type
+    &(nonce_adjust_map: -65538) => {
+      + text => uint
+    }
+  )
 })
+
+nonce_adjust_function_type /= "shake-128"
+nonce_adjust_function_type /= "shake-256"
 
 phdrs = {
   ? &(x5chain: 33) => bytes / [ 2*certs: bytes ]
@@ -58,6 +67,12 @@ ratsd-token-legacy = {
   "eat_profile": "tag:github.com,2024:veraison/ratsd"
   "eat_nonce": text .size (8..88)
   "cmw": text ; .b64u ratsd-collection-legacy
+  ? (
+    "vnd.veraison.nonce_adjust_function": nonce_adjust_function_type
+    "vnd.veraison.nonce_adjust_map": {
+      + text => uint
+    }
+  )
 }
 
 ;;;;;;;;;;;;;;;;
