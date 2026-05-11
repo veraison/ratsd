@@ -286,6 +286,47 @@ func (e *Evidence) extractX5Chain(x5chain interface{}) error {
 
 }
 
-// Consider X5Chain, signing Certificate, One or More..
+// API Defintion which will be enhanced to full Impementation
+/*
+// We should have two seperate API Versions V1 and V2, for backward compatibility
 
-// Protected Header should have x5t, There is some thumbprint...
+func NewEvidence(tokenVersion int, options ...EvidenceOption) (*Evidence, error) {
+
+}
+
+
+func (e Evidence) Valid() error {
+}
+
+func (o *Evidence) AddSigningCert(der []byte) error {
+}
+
+func (e *Evidence) AddIntermediateCerts(der []byte) error {
+}
+
+func (e *Evidence) AddToken(key string, evMt string, token []byte) error {
+}
+
+
+func (e *Evidence) ValidateAndSign(signer cose.Signer) ([]byte, error) {
+
+}
+
+// AddNonce stores the nonce that will be embedded in the serialized evidence.
+func (e *Evidence) AddNonce(nonce []byte) error {
+}
+
+
+func (e *Evidence) Verify(pk crypto.PublicKey) error {
+
+}
+
+// FromCOSE decodes and effects syntactic validation on the supplied
+// COSE Wrapped Evidence message, Decoding the Claims in the Lead Attester Token
+func (e *Evidence) FromCOSE(buf []byte) error {
+
+}
+
+
+
+*/
