@@ -290,33 +290,37 @@ func (e *Evidence) extractX5Chain(x5chain interface{}) error {
 /*
 // We should have two seperate API Versions V1 and V2, for backward compatibility
 
-func NewEvidence(tokenVersion int, options ...EvidenceOption) (*Evidence, error) {
+// NewEvidence instantiates a New Evidence from the supplied options
+func NewEvidence(options ...EvidenceOption) (*Evidence, error) {
 
 }
 
-
+// Valid checks the validity of the Evidence
 func (e Evidence) Valid() error {
 }
 
+// AddSigningCert adds the Signing Certificate to the Evidence
 func (o *Evidence) AddSigningCert(der []byte) error {
 }
 
+// AddIntermediateCerts, adds any Optional Certificates to the Evidence
 func (e *Evidence) AddIntermediateCerts(der []byte) error {
 }
 
+// Add Token, Adds a New Token to the RATSD collection
 func (e *Evidence) AddToken(key string, evMt string, token []byte) error {
 }
 
-
+// ValidateAndSign validates the Evidence and if Valid Signs it with a Supplied Signer
 func (e *Evidence) ValidateAndSign(signer cose.Signer) ([]byte, error) {
 
 }
 
-// AddNonce stores the nonce that will be embedded in the serialized evidence.
+// AddNonce stores the nonce that will be embedded in the Lead Attester Token.
 func (e *Evidence) AddNonce(nonce []byte) error {
 }
 
-
+// Verify Verifies the signature on the Evidence Collection
 func (e *Evidence) Verify(pk crypto.PublicKey) error {
 
 }
@@ -326,7 +330,5 @@ func (e *Evidence) Verify(pk crypto.PublicKey) error {
 func (e *Evidence) FromCOSE(buf []byte) error {
 
 }
-
-
 
 */
