@@ -89,7 +89,7 @@ the following example:
     "mock-tsm"
 ],
 "mock-tsm": {
-    "content-type": "application/vnd.veraison.configfs-tsm+json",
+    "content-type": "application/vnd.veraison.tsm-report+json",
     "privilege_level": "3"
 }
 ```
