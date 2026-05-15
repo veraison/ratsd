@@ -312,7 +312,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			c, err := collection.GetCollectionItem("mock-tsm")
 			assert.NoError(t, err)
 			assert.Equal(t, cmw.KindMonad, c.GetKind())
-			assert.Equal(t, c.GetMonadType(), "application/vnd.veraison.configfs-tsm+json")
+			assert.Equal(t, c.GetMonadType(), tokens.TSMReportMediaTypeJSON)
 
 			tsmout := &tokens.TSMReport{}
 			tsmout.FromJSON(c.GetMonadValue())

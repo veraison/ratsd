@@ -42,7 +42,8 @@ const (
 
 // Defines values for CMWTyp.
 const (
-	ApplicationvndVeraisonConfigfsTsmJson CMWTyp = "application/vnd.veraison.configfs-tsm+json"
+	ApplicationvndVeraisonTsmReportCbor CMWTyp = "application/vnd.veraison.tsm-report+cbor"
+	ApplicationvndVeraisonTsmReportJson CMWTyp = "application/vnd.veraison.tsm-report+json"
 )
 
 // Defines values for EATEatProfile.

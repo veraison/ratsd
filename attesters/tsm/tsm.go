@@ -16,9 +16,7 @@ import (
 )
 
 const (
-	ApplicationvndVeraisonConfigfsTsmCbor = "application/vnd.veraison.configfs-tsm+cbor"
-	ApplicationvndVeraisonConfigfsTsmJson = "application/vnd.veraison.configfs-tsm+json"
-	tsmNonceSize                          = 64
+	tsmNonceSize = 64
 )
 
 var (
@@ -29,11 +27,11 @@ var (
 
 	supportedFormats = []*compositor.Format{
 		&compositor.Format{
-			ContentType: ApplicationvndVeraisonConfigfsTsmJson,
+			ContentType: tokens.TSMReportMediaTypeJSON,
 			NonceSize:   tsmNonceSize,
 		},
 		&compositor.Format{
-			ContentType: ApplicationvndVeraisonConfigfsTsmCbor,
+			ContentType: tokens.TSMReportMediaTypeCBOR,
 			NonceSize:   tsmNonceSize,
 		},
 	}
@@ -153,7 +151,7 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			var encodeOp func() ([]byte, error)
 			encodeAs := "JSON"
 
-			if in.ContentType == ApplicationvndVeraisonConfigfsTsmCbor {
+			if in.ContentType == tokens.TSMReportMediaTypeCBOR {
 				encodeOp = out.ToCBOR
 				encodeAs = "CBOR"
 			} else {
@@ -167,8 +165,8 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			}
 
 			return &compositor.EvidenceOut{
-				Status:   statusSucceeded,
-				Evidence: outEncoded,
+				Status:     statusSucceeded,
+				Evidence:   outEncoded,
 				StatusCode: http.StatusOK,
 			}
 		}

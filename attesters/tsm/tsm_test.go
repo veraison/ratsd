@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/stretchr/testify/assert"
 	"github.com/veraison/ratsd/proto/compositor"
+	"github.com/veraison/ratsd/tokens"
 )
 
 const (
@@ -21,7 +22,7 @@ var (
 )
 
 func Test_getEvidenceError(t *testing.T) {
-	tests := []uint32 {http.StatusBadRequest, http.StatusBadRequest}
+	tests := []uint32{http.StatusBadRequest, http.StatusBadRequest}
 	for _, tt := range tests {
 		e := fmt.Errorf("sample error")
 
@@ -81,7 +82,7 @@ func Test_GetSupportedFormats(t *testing.T) {
 func Test_GetEvidence_wrong_nonce_size(t *testing.T) {
 	inblob := []byte("abcdefghijklmnopqrstuvwxyz123456")
 	in := &compositor.EvidenceIn{
-		ContentType: ApplicationvndVeraisonConfigfsTsmJson,
+		ContentType: tokens.TSMReportMediaTypeJSON,
 		Nonce:       inblob,
 	}
 
@@ -130,7 +131,7 @@ func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			inblob := []byte(validNonceStr)
 			in := &compositor.EvidenceIn{
-				ContentType: ApplicationvndVeraisonConfigfsTsmJson,
+				ContentType: tokens.TSMReportMediaTypeJSON,
 				Nonce:       inblob,
 				Options:     []byte(tt.params),
 			}

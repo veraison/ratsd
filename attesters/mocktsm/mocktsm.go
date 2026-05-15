@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	mediaType = "application/vnd.veraison.configfs-tsm+json"
+	mediaType = tokens.TSMReportMediaTypeJSON
 	nonceSize = 64
 )
 
@@ -106,7 +106,7 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 		level, err := strconv.Atoi(privlevel)
 		if err != nil || level < 0 {
 			errMsg := fmt.Errorf("privilege_level %s is invalid",
-			privlevel)
+				privlevel)
 			return getEvidenceError(errMsg, http.StatusBadRequest)
 		}
 		req.Privilege = &report.Privilege{Level: uint(level)}
@@ -131,8 +131,8 @@ func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 	}
 
 	return &compositor.EvidenceOut{
-		Status:   statusSucceeded,
-		Evidence: outEncoded,
+		Status:     statusSucceeded,
+		Evidence:   outEncoded,
 		StatusCode: http.StatusOK,
 	}
 }
