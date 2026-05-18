@@ -23,7 +23,7 @@ const (
 // the underlying CMWCollection
 // nolint: golint
 type Evidence struct {
-	collection        *cmw.CMW
+	collection        *cmw.CMW // RATSD Token
 	claims            *Claims
 	SigningCert       *x509.Certificate
 	IntermediateCerts []*x509.Certificate
@@ -32,7 +32,9 @@ type Evidence struct {
 
 type Option func(*Evidence)
 
-func NewEvidence() (*Evidence, error) {
+// Options for setting Nonce
+// Option for setting nonce_adjust_function,
+func NewEvidence(opts ...Options) (*Evidence, error) {
 	ev, err := cmw.NewCollection(ratsdMediaType)
 	msg := cose.NewSign1Message()
 	if err != nil {
@@ -66,22 +68,36 @@ func (e *Evidence) AddToken(key string, evMt string, token []byte) error {
 	return nil
 }
 
-// ValidateAndSign returns the Evidence wrapped in a CWT according to the supplied
-// go-cose Signer.
-func (e *Evidence) ValidateAndSign(signer cose.Signer) ([]byte, error) {
+func (e Evidence) Valid() error {
 
-	var err error
+	// Check that Lead Attester Monad Exists
+	// Check if claims pointer exists and not nil
+	// Check valid() on Claims
+
 	if e.collection == nil {
-		return nil, errors.New("collection does not exist")
+		return errors.New("collection does not exist")
 	}
 	if err := e.collection.Valid(); err != nil {
-		return nil, fmt.Errorf("invalid CMW Collection %w", err)
+		return fmt.Errorf("invalid CMW Collection %w", err)
 	}
-	// Check if Lead Attester UCCS Exists
-	// If Not Add UCCS Monad
-	if err := e.insertLeadAttesterMonad(); err != nil {
+	return nil
+}
+
+// Sign returns the Evidence wrapped in a CWT according to the supplied
+// go-cose Signer.
+func (e *Evidence) Sign(signer cose.Signer) ([]byte, error) {
+
+	if err := e.Valid(); err != nil {
 		return nil, err
 	}
+
+	b, err := e.createLeadAttesterToken()
+	if err != nil {
+		return nil, err
+	}
+
+	e.AddToken("__ratsd", "application/eat-ucs+cbor; eat_profile=\"tag:github.com,2026:veraison/ratsd/v2\"", b)
+
 	e.message.Payload, err = e.collection.MarshalCBOR()
 	if err != nil {
 		return nil, err
@@ -167,30 +183,19 @@ func (e *Evidence) AddIntermediateCerts(der []byte) error {
 	return nil
 }
 
-func (e Evidence) Valid() error {
-
-	if e.collection == nil {
-		return errors.New("collection does not exist")
-	}
-	if err := e.collection.Valid(); err != nil {
-		return fmt.Errorf("invalid CMW Collection %w", err)
-	}
-	return nil
-}
-
-func (e *Evidence) insertLeadAttesterMonad() error {
+func (e *Evidence) createLeadAttesterToken() ([]byte, error) {
 	if e.claims != nil {
 		// report error
 	}
 	if err := e.claims.Valid(); err != nil {
-		return err
+		return nil, err
 	}
 	b, err := MarshalUCCS(e.claims)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	e.AddToken("__ratsd", "application/eat-ucs+cbor; eat_profile=\"tag:github.com,2026:veraison/ratsd/v2\"", b)
-	return nil
+
+	return b, nil
 }
 
 // UnMarshal
@@ -289,6 +294,7 @@ func (e *Evidence) extractX5Chain(x5chain interface{}) error {
 // API Defintion which will be enhanced to full Impementation
 /*
 // We should have two seperate API Versions V1 and V2, for backward compatibility
+// The below is the V2 Version
 
 // NewEvidence instantiates a New Evidence from the supplied options
 func NewEvidence(options ...EvidenceOption) (*Evidence, error) {
