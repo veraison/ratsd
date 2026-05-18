@@ -50,3 +50,18 @@ func MarshalUCCS(claims *Claims) ([]byte, error) {
 		Content: *claims,
 	})
 }
+
+func (c *Claims) SetNonceAdjustFn(alg string) error {
+
+	return nil
+}
+
+func (c *Claims) SetKeyandNonceSz(key string, sz uint) error {
+	if c.Nonce_adjust_map == nil {
+		c.Nonce_adjust_map = make(map[string]uint)
+	}
+	// Check, if the key already exist, return error
+
+	c.Nonce_adjust_map[key] = sz
+	return nil
+}
