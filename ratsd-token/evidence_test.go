@@ -64,9 +64,10 @@ func TestClaimsSetNonce(t *testing.T) {
 	var claimSet Claims
 
 	assert.NoError(t, claimSet.SetNonce([]byte("abcdefgh")))
-	if assert.NotNil(t, claimSet.EatNonce) {
-		assert.Equal(t, 1, claimSet.EatNonce.Len())
-		assert.Equal(t, []byte("abcdefgh"), claimSet.EatNonce.GetI(0))
+	nonce := claimSet.GetEatNonce()
+	if assert.NotNil(t, nonce) {
+		assert.Equal(t, 1, nonce.Len())
+		assert.Equal(t, []byte("abcdefgh"), nonce.GetI(0))
 	}
 }
 
@@ -81,9 +82,7 @@ func TestClaimsSetNonceAdjustFn(t *testing.T) {
 	var claimSet Claims
 
 	assert.NoError(t, claimSet.SetNonceAdjustFn(NonceAdjustFunctionShake256))
-	if assert.NotNil(t, claimSet.NonceAdjustFunction) {
-		assert.Equal(t, NonceAdjustFunctionShake256, *claimSet.NonceAdjustFunction)
-	}
+	assert.Equal(t, NonceAdjustFunctionShake256, claimSet.GetNonceAdjustFn())
 }
 
 func TestClaimsSetNonceAdjustFnFail(t *testing.T) {
@@ -97,7 +96,10 @@ func TestClaimsSetKeyandNonceSz(t *testing.T) {
 	var claimSet Claims
 
 	assert.NoError(t, claimSet.SetKeyandNonceSz("configfs-tsm", 32))
-	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, claimSet.NonceAdjustMap)
+	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, claimSet.GetNonceAdjustMap())
+	sz, ok := claimSet.GetKeyandNonceSz("configfs-tsm")
+	assert.True(t, ok)
+	assert.Equal(t, uint(32), sz)
 }
 
 func TestClaimsSetKeyandNonceSzFail(t *testing.T) {
@@ -111,6 +113,37 @@ func TestEvidenceValidPass(t *testing.T) {
 	evidence := validEvidence()
 
 	assert.NoError(t, evidence.Valid())
+}
+
+func TestClaimsGettersNilSafe(t *testing.T) {
+	var claimSet *Claims
+
+	assert.Nil(t, claimSet.GetEatProfile())
+	assert.Nil(t, claimSet.GetEatNonce())
+	assert.Nil(t, claimSet.GetCMW())
+	assert.Equal(t, "", claimSet.GetNonceAdjustFn())
+	assert.Nil(t, claimSet.GetNonceAdjustMap())
+	sz, ok := claimSet.GetKeyandNonceSz("configfs-tsm")
+	assert.False(t, ok)
+	assert.Equal(t, uint(0), sz)
+}
+
+func TestClaimsGettersPass(t *testing.T) {
+	evidence := validEvidence()
+	fn := NonceAdjustFunctionShake128
+	evidence.Claims.NonceAdjustFunction = &fn
+	evidence.Claims.NonceAdjustMap = map[string]uint{
+		"configfs-tsm": 32,
+	}
+
+	assert.Same(t, evidence.Claims.EatProfile, evidence.Claims.GetEatProfile())
+	assert.Same(t, evidence.Claims.EatNonce, evidence.Claims.GetEatNonce())
+	assert.Same(t, evidence.Claims.CMW, evidence.Claims.GetCMW())
+	assert.Equal(t, NonceAdjustFunctionShake128, evidence.Claims.GetNonceAdjustFn())
+	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, evidence.Claims.GetNonceAdjustMap())
+	sz, ok := evidence.Claims.GetKeyandNonceSz("configfs-tsm")
+	assert.True(t, ok)
+	assert.Equal(t, uint(32), sz)
 }
 
 func TestEvidenceValidFailWrongProfile(t *testing.T) {

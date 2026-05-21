@@ -32,6 +32,61 @@ type Claims struct {
 	NonceAdjustMap      map[string]uint `json:"vnd.veraison.nonce_adjust_map,omitempty"`
 }
 
+// GetEatProfile returns the EAT profile claim.
+func (c *Claims) GetEatProfile() *eat.Profile {
+	if c == nil {
+		return nil
+	}
+
+	return c.EatProfile
+}
+
+// GetEatNonce returns the EAT nonce claim.
+func (c *Claims) GetEatNonce() *eat.Nonce {
+	if c == nil {
+		return nil
+	}
+
+	return c.EatNonce
+}
+
+// GetCMW returns the legacy CMW collection claim.
+func (c *Claims) GetCMW() *cmw.CMW {
+	if c == nil {
+		return nil
+	}
+
+	return c.CMW
+}
+
+// GetNonceAdjustFn returns the nonce adjustment algorithm, if set.
+func (c *Claims) GetNonceAdjustFn() string {
+	if c == nil || c.NonceAdjustFunction == nil {
+		return ""
+	}
+
+	return *c.NonceAdjustFunction
+}
+
+// GetNonceAdjustMap returns the nonce adjustment map.
+func (c *Claims) GetNonceAdjustMap() map[string]uint {
+	if c == nil {
+		return nil
+	}
+
+	return c.NonceAdjustMap
+}
+
+// GetKeyandNonceSz returns the configured adjusted nonce size for the given key.
+func (c *Claims) GetKeyandNonceSz(key string) (uint, bool) {
+	if c == nil || c.NonceAdjustMap == nil {
+		return 0, false
+	}
+
+	sz, ok := c.NonceAdjustMap[key]
+	return sz, ok
+}
+
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
 func (c *Claims) SetNonce(v []byte) error {
 	if c == nil {
