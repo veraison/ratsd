@@ -3,10 +3,12 @@
 package ratsdtoken
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/veraison/cmw"
 	"github.com/veraison/eat"
 )
 
@@ -21,11 +23,58 @@ func validEvidence() *Evidence {
 		panic(err)
 	}
 	claimSet.EatProfile = profile
-	claimSet.CMW = "ZXhhbXBsZS1jbXc"
+	collection, _ := makeLegacyCMWForTest()
+	if err := claimSet.SetCMW(collection); err != nil {
+		panic(err)
+	}
 
 	return &Evidence{
 		Claims: claimSet,
 	}
+}
+
+func makeLegacyCMWForTest() (*cmw.CMW, string) {
+	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	if collection == nil {
+		panic("failed to create legacy CMW collection")
+	}
+
+	node := cmw.NewMonad("application/octet-stream", []byte{0x01, 0x02, 0x03})
+	if err := collection.AddCollectionItem("mock-tsm", node); err != nil {
+		panic(err)
+	}
+
+	encoded, err := collection.MarshalJSON()
+	if err != nil {
+		panic(err)
+	}
+
+	return collection, base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func makeLegacyCMW(t *testing.T) (*cmw.CMW, string) {
+	t.Helper()
+
+	collection, encoded := makeLegacyCMWForTest()
+	if !assert.NotNil(t, collection) {
+		return nil, ""
+	}
+
+	return collection, encoded
+}
+
+func assertCMWEquivalent(t *testing.T, expected, actual *cmw.CMW) {
+	t.Helper()
+
+	if !assert.NotNil(t, expected) || !assert.NotNil(t, actual) {
+		return
+	}
+
+	expectedJSON, err := expected.MarshalJSON()
+	assert.NoError(t, err)
+	actualJSON, err := actual.MarshalJSON()
+	assert.NoError(t, err)
+	assert.Equal(t, expectedJSON, actualJSON)
 }
 func assertEvidenceEquivalent(t *testing.T, expected, actual *Evidence) {
 	t.Helper()
@@ -92,6 +141,31 @@ func TestClaimsSetNonceAdjustFnFail(t *testing.T) {
 	assert.Nil(t, claimSet.NonceAdjustFunction)
 }
 
+func TestClaimsSetCMW(t *testing.T) {
+	var claimSet Claims
+	collection, expected := makeLegacyCMW(t)
+
+	assert.NoError(t, claimSet.SetCMW(collection))
+	assert.Equal(t, expected, claimSet.CMW)
+	assertCMWEquivalent(t, collection, claimSet.GetCMW())
+}
+
+func TestClaimsSetCMWFromValue(t *testing.T) {
+	var claimSet Claims
+	collection, expected := makeLegacyCMW(t)
+
+	assert.NoError(t, claimSet.SetCMW(*collection))
+	assert.Equal(t, expected, claimSet.CMW)
+	assertCMWEquivalent(t, collection, claimSet.GetCMW())
+}
+
+func TestClaimsSetCMWFail(t *testing.T) {
+	var claimSet Claims
+
+	assert.EqualError(t, claimSet.SetCMW("not-a-cmw"), `invalid claim "cmw": string`)
+	assert.Nil(t, claimSet.GetCMW())
+}
+
 func TestClaimsSetKeyandNonceSz(t *testing.T) {
 	var claimSet Claims
 
@@ -138,7 +212,8 @@ func TestClaimsGettersPass(t *testing.T) {
 
 	assert.Same(t, evidence.Claims.EatProfile, evidence.Claims.GetEatProfile())
 	assert.Same(t, evidence.Claims.EatNonce, evidence.Claims.GetEatNonce())
-	assert.Same(t, evidence.Claims.CMW, evidence.Claims.GetCMW())
+	expectedCMW, _ := makeLegacyCMW(t)
+	assertCMWEquivalent(t, expectedCMW, evidence.Claims.GetCMW())
 	assert.Equal(t, NonceAdjustFunctionShake128, evidence.Claims.GetNonceAdjustFn())
 	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, evidence.Claims.GetNonceAdjustMap())
 	sz, ok := evidence.Claims.GetKeyandNonceSz("configfs-tsm")

@@ -3,16 +3,18 @@
 package ratsdtoken
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 
+	"github.com/veraison/cmw"
 	"github.com/veraison/eat"
 )
 
 const (
 	LegacyProfile = "tag:github.com,2024:veraison/ratsd"
-	LegacyCMWType = "tag:github.com,2025:veraison/ratsd/cmw"
 
 	NonceAdjustFunctionShake128 = "shake-128"
 	NonceAdjustFunctionShake256 = "shake-256"
@@ -52,11 +54,16 @@ func (c *Claims) GetEatNonce() *eat.Nonce {
 
 // GetCMW returns the legacy CMW collection claim.
 func (c *Claims) GetCMW() *cmw.CMW {
-	if c == nil {
+	if c == nil || c.CMW == "" {
 		return nil
 	}
 
-	return c.CMW
+	decoded, err := decodeLegacyCMW(c.CMW)
+	if err != nil {
+		return nil
+	}
+
+	return decoded
 }
 
 // GetNonceAdjustFn returns the nonce adjustment algorithm, if set.
@@ -85,6 +92,30 @@ func (c *Claims) GetKeyandNonceSz(key string) (uint, bool) {
 
 	sz, ok := c.NonceAdjustMap[key]
 	return sz, ok
+}
+
+// SetCMW serializes the supplied CMW object into the legacy base64url claim form.
+func (c *Claims) SetCMW(v interface{}) error {
+	if c == nil {
+		return errors.New("nil claims")
+	}
+
+	if v == nil {
+		return errors.New(`invalid claim "cmw": nil value`)
+	}
+
+	cmwValue, err := toCMW(v)
+	if err != nil {
+		return err
+	}
+
+	encoded, err := cmwValue.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf(`invalid claim "cmw": %w`, err)
+	}
+
+	c.CMW = base64.RawURLEncoding.EncodeToString(encoded)
+	return nil
 }
 
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
@@ -137,6 +168,42 @@ func (c *Claims) SetKeyandNonceSz(key string, sz uint) error {
 	return nil
 }
 
+func decodeLegacyCMW(v string) (*cmw.CMW, error) {
+	b, err := base64.RawURLEncoding.DecodeString(v)
+	if err != nil {
+		return nil, fmt.Errorf("CMW base64url decoding failed: %w", err)
+	}
+
+	var decoded cmw.CMW
+	if err := decoded.UnmarshalJSON(b); err != nil {
+		return nil, fmt.Errorf("CMW JSON decoding failed: %w", err)
+	}
+
+	return &decoded, nil
+}
+
+func toCMW(v interface{}) (cmw.CMW, error) {
+	targetType := reflect.TypeOf(cmw.CMW{})
+	value := reflect.ValueOf(v)
+
+	if value.Type().ConvertibleTo(targetType) {
+		return value.Convert(targetType).Interface().(cmw.CMW), nil
+	}
+
+	if value.Kind() == reflect.Ptr {
+		if value.IsNil() {
+			return cmw.CMW{}, errors.New(`invalid claim "cmw": nil value`)
+		}
+
+		elem := value.Elem()
+		if elem.Type().ConvertibleTo(targetType) {
+			return elem.Convert(targetType).Interface().(cmw.CMW), nil
+		}
+	}
+
+	return cmw.CMW{}, fmt.Errorf(`invalid claim "cmw": %T`, v)
+}
+
 // NewEvidence returns an Evidence with the legacy EAT profile preset.
 func NewEvidence() *Evidence {
 	profile, err := eat.NewProfile(LegacyProfile)
@@ -184,6 +251,9 @@ func (e *Evidence) Valid() error {
 		return errors.New(`missing mandatory claim "cmw"`)
 	}
 
+	if _, err := decodeLegacyCMW(c.CMW); err != nil {
+		return fmt.Errorf(`invalid claim "cmw": %w`, err)
+	}
 	if c.NonceAdjustFunction != nil {
 		if *c.NonceAdjustFunction == "" {
 			return errors.New(`invalid claim "vnd.veraison.nonce_adjust_function": empty value`)
