@@ -16,7 +16,7 @@ func validEvidence() *Evidence {
 		panic(err)
 	}
 
-	var claimSet claims
+	var claimSet Claims
 	if err := claimSet.SetNonce([]byte("12345678")); err != nil {
 		panic(err)
 	}
@@ -27,7 +27,6 @@ func validEvidence() *Evidence {
 		Claims: claimSet,
 	}
 }
-
 func assertEvidenceEquivalent(t *testing.T, expected, actual *Evidence) {
 	t.Helper()
 
@@ -62,7 +61,7 @@ func TestNewEvidence(t *testing.T) {
 }
 
 func TestClaimsSetNonce(t *testing.T) {
-	var claimSet claims
+	var claimSet Claims
 
 	assert.NoError(t, claimSet.SetNonce([]byte("abcdefgh")))
 	if assert.NotNil(t, claimSet.EatNonce) {
@@ -72,14 +71,14 @@ func TestClaimsSetNonce(t *testing.T) {
 }
 
 func TestClaimsSetNonceFail(t *testing.T) {
-	var claimSet claims
+	var claimSet Claims
 
 	assert.EqualError(t, claimSet.SetNonce([]byte("short")), "a nonce must be between 8 and 64 bytes long; found 5")
 	assert.Nil(t, claimSet.EatNonce)
 }
 
 func TestClaimsSetNonceAdjustFn(t *testing.T) {
-	var claimSet claims
+	var claimSet Claims
 
 	assert.NoError(t, claimSet.SetNonceAdjustFn(NonceAdjustFunctionShake256))
 	if assert.NotNil(t, claimSet.NonceAdjustFunction) {
@@ -88,21 +87,21 @@ func TestClaimsSetNonceAdjustFn(t *testing.T) {
 }
 
 func TestClaimsSetNonceAdjustFnFail(t *testing.T) {
-	var claimSet claims
+	var claimSet Claims
 
 	assert.EqualError(t, claimSet.SetNonceAdjustFn("sha-256"), `invalid claim "vnd.veraison.nonce_adjust_function": "sha-256"`)
 	assert.Nil(t, claimSet.NonceAdjustFunction)
 }
 
 func TestClaimsSetKeyandNonceSz(t *testing.T) {
-	var claimSet claims
+	var claimSet Claims
 
 	assert.NoError(t, claimSet.SetKeyandNonceSz("configfs-tsm", 32))
 	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, claimSet.NonceAdjustMap)
 }
 
 func TestClaimsSetKeyandNonceSzFail(t *testing.T) {
-	var claimSet claims
+	var claimSet Claims
 
 	assert.EqualError(t, claimSet.SetKeyandNonceSz("", 32), `invalid claim "vnd.veraison.nonce_adjust_map": empty key`)
 	assert.Nil(t, claimSet.NonceAdjustMap)

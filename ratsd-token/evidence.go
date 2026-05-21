@@ -20,11 +20,11 @@ const (
 
 // Evidence exposes the legacy RATSD token as a single claims container.
 type Evidence struct {
-	Claims claims `json:"-"`
+	Claims Claims `json:"-"`
 }
 
-// claims contains the legacy RATSD token claims defined in docs/ratsd-token.cddl.
-type claims struct {
+// Claims contains the legacy RATSD token claims defined in docs/ratsd-token.cddl.
+type Claims struct {
 	EatProfile          *eat.Profile    `json:"eat_profile"`
 	EatNonce            *eat.Nonce      `json:"eat_nonce"`
 	CMW                 string          `json:"cmw"`
@@ -33,7 +33,7 @@ type claims struct {
 }
 
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
-func (c *claims) SetNonce(v []byte) error {
+func (c *Claims) SetNonce(v []byte) error {
 	if c == nil {
 		return errors.New("nil claims")
 	}
@@ -48,7 +48,7 @@ func (c *claims) SetNonce(v []byte) error {
 }
 
 // SetNonceAdjustFn sets the nonce adjustment algorithm.
-func (c *claims) SetNonceAdjustFn(alg string) error {
+func (c *Claims) SetNonceAdjustFn(alg string) error {
 	if c == nil {
 		return errors.New("nil claims")
 	}
@@ -65,7 +65,7 @@ func (c *claims) SetNonceAdjustFn(alg string) error {
 }
 
 // SetKeyandNonceSz sets the nonce-adjusted size for a given key.
-func (c *claims) SetKeyandNonceSz(key string, sz uint) error {
+func (c *Claims) SetKeyandNonceSz(key string, sz uint) error {
 	if c == nil {
 		return errors.New("nil claims")
 	}
@@ -90,7 +90,7 @@ func NewEvidence() *Evidence {
 	}
 
 	return &Evidence{
-		Claims: claims{
+		Claims: Claims{
 			EatProfile: profile,
 		},
 	}
@@ -168,7 +168,7 @@ func (e Evidence) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON decodes Evidence from the flat legacy claim layout.
 func (e *Evidence) UnmarshalJSON(data []byte) error {
-	var decoded claims
+	var decoded Claims
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return fmt.Errorf("JSON decoding failed: %w", err)
 	}
