@@ -25,6 +25,35 @@ type Evidence struct {
 	Claims Claims `json:"-"`
 }
 
+// SetClaims attaches the supplied claims to the Evidence instance.
+// Only successfully validated claims are allowed to be set.
+func (e *Evidence) SetClaims(c Claims) error {
+	if e == nil {
+		return errors.New("nil evidence")
+	}
+
+	tmp := Evidence{Claims: c}
+	if err := tmp.Valid(); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	e.Claims = c
+	return nil
+}
+
+// GetClaims returns the stored claims after validating the evidence state.
+func (e *Evidence) GetClaims() (c Claims, err error) {
+	if e == nil {
+		return c, errors.New("nil evidence")
+	}
+
+	if err = e.Valid(); err != nil {
+		return c, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return e.Claims, nil
+}
+
 // Claims contains the legacy RATSD token claims defined in docs/ratsd-token.cddl.
 type Claims struct {
 	EatProfile          *eat.Profile    `json:"eat_profile"`

@@ -189,6 +189,69 @@ func TestEvidenceValidPass(t *testing.T) {
 	assert.NoError(t, evidence.Valid())
 }
 
+func TestEvidenceSetClaimsPass(t *testing.T) {
+	src := validEvidence()
+
+	var evidence Evidence
+	err := evidence.SetClaims(src.Claims)
+
+	assert.NoError(t, err)
+	assertEvidenceEquivalent(t, src, &evidence)
+}
+
+func TestEvidenceSetClaimsFail(t *testing.T) {
+	valid := validEvidence()
+	invalid := validEvidence().Claims
+	invalid.CMW = ""
+
+	evidence := Evidence{Claims: valid.Claims}
+	err := evidence.SetClaims(invalid)
+
+	assert.EqualError(t, err, `validation failed: missing mandatory claim "cmw"`)
+	assertEvidenceEquivalent(t, valid, &evidence)
+}
+
+func TestEvidenceSetClaimsNilEvidence(t *testing.T) {
+	var evidence *Evidence
+
+	err := evidence.SetClaims(Claims{})
+
+	assert.EqualError(t, err, "nil evidence")
+}
+
+func TestEvidenceGetClaimsPass(t *testing.T) {
+	evidence := validEvidence()
+	fn := NonceAdjustFunctionShake128
+	evidence.Claims.NonceAdjustFunction = &fn
+	evidence.Claims.NonceAdjustMap = map[string]uint{
+		"configfs-tsm": 32,
+	}
+
+	actual, err := evidence.GetClaims()
+
+	assert.NoError(t, err)
+	assertEvidenceEquivalent(t, evidence, &Evidence{Claims: actual})
+}
+
+func TestEvidenceGetClaimsFail(t *testing.T) {
+	evidence := validEvidence()
+	evidence.Claims.CMW = ""
+
+	claims, err := evidence.GetClaims()
+
+	assert.EqualError(t, err, `validation failed: missing mandatory claim "cmw"`)
+	assert.Equal(t, Claims{}, claims)
+}
+
+func TestEvidenceGetClaimsNilEvidence(t *testing.T) {
+	var evidence *Evidence
+
+	claims, err := evidence.GetClaims()
+
+	assert.EqualError(t, err, "nil evidence")
+	assert.Equal(t, Claims{}, claims)
+}
+
 func TestClaimsGettersNilSafe(t *testing.T) {
 	var claimSet *Claims
 
