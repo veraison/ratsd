@@ -30,7 +30,6 @@ var (
 	errMissingEatNonce            = errors.New(`missing mandatory claim "eat_nonce"`)
 	errMissingCMW                 = errors.New(`missing mandatory claim "cmw"`)
 	errMissingNonceAdjustMap      = errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_map"`)
-	errEmptyNonceAdjustMap        = errors.New(`invalid claim "vnd.veraison.nonce_adjust_map": must contain at least one entry`)
 	errMissingNonceAdjustFunction = errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_function"`)
 )
 
@@ -314,10 +313,6 @@ func (e *Evidence) Valid() error {
 	}
 
 	if c.NonceAdjustMap != nil {
-		if len(c.NonceAdjustMap) == 0 {
-			return errEmptyNonceAdjustMap
-		}
-
 		if c.NonceAdjustFunction == nil {
 			return errMissingNonceAdjustFunction
 		}

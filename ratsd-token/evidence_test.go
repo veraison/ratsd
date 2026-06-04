@@ -293,6 +293,15 @@ func TestEvidenceValidFailWrongProfile(t *testing.T) {
 	assert.EqualError(t, evidence.Valid(), `invalid claim "eat_profile": expected "tag:github.com,2024:veraison/ratsd"`)
 }
 
+func TestEvidenceValidPassEmptyNonceAdjustMap(t *testing.T) {
+	evidence := validEvidence()
+	fn := NonceAdjustFunctionShake256
+	evidence.Claims.NonceAdjustFunction = &fn
+	evidence.Claims.NonceAdjustMap = map[string]uint{}
+
+	assert.NoError(t, evidence.Valid())
+}
+
 func TestEvidenceValidFailIncompleteNonceAdjustGroup(t *testing.T) {
 	evidence := validEvidence()
 	fn := NonceAdjustFunctionShake256
