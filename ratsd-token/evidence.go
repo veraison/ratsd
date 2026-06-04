@@ -20,6 +20,20 @@ const (
 	NonceAdjustFunctionShake256 = "shake-256"
 )
 
+var (
+	errNilEvidence                = errors.New("nil evidence")
+	errNilClaims                  = errors.New("nil claims")
+	errNilCMWValue                = errors.New(`invalid claim "cmw": nil value`)
+	errEmptyNonceAdjustFunction   = errors.New(`invalid claim "vnd.veraison.nonce_adjust_function": empty value`)
+	errEmptyNonceAdjustMapKey     = errors.New(`invalid claim "vnd.veraison.nonce_adjust_map": empty key`)
+	errMissingEatProfile          = errors.New(`missing mandatory claim "eat_profile"`)
+	errMissingEatNonce            = errors.New(`missing mandatory claim "eat_nonce"`)
+	errMissingCMW                 = errors.New(`missing mandatory claim "cmw"`)
+	errMissingNonceAdjustMap      = errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_map"`)
+	errEmptyNonceAdjustMap        = errors.New(`invalid claim "vnd.veraison.nonce_adjust_map": must contain at least one entry`)
+	errMissingNonceAdjustFunction = errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_function"`)
+)
+
 // Evidence exposes the legacy RATSD token as a single claims container.
 type Evidence struct {
 	Claims Claims `json:"-"`
@@ -29,7 +43,7 @@ type Evidence struct {
 // Only successfully validated claims are allowed to be set.
 func (e *Evidence) SetClaims(c Claims) error {
 	if e == nil {
-		return errors.New("nil evidence")
+		return errNilEvidence
 	}
 
 	tmp := Evidence{Claims: c}
@@ -44,7 +58,7 @@ func (e *Evidence) SetClaims(c Claims) error {
 // GetClaims returns the stored claims after validating the evidence state.
 func (e *Evidence) GetClaims() (c Claims, err error) {
 	if e == nil {
-		return c, errors.New("nil evidence")
+		return c, errNilEvidence
 	}
 
 	if err = e.Valid(); err != nil {
@@ -126,11 +140,11 @@ func (c *Claims) GetKeyandNonceSz(key string) (uint, bool) {
 // SetCMW serializes the supplied CMW object into the legacy base64url claim form.
 func (c *Claims) SetCMW(v interface{}) error {
 	if c == nil {
-		return errors.New("nil claims")
+		return errNilClaims
 	}
 
 	if v == nil {
-		return errors.New(`invalid claim "cmw": nil value`)
+		return errNilCMWValue
 	}
 
 	cmwValue, err := toCMW(v)
@@ -150,7 +164,7 @@ func (c *Claims) SetCMW(v interface{}) error {
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
 func (c *Claims) SetNonce(v []byte) error {
 	if c == nil {
-		return errors.New("nil claims")
+		return errNilClaims
 	}
 
 	var nonce eat.Nonce
@@ -165,7 +179,7 @@ func (c *Claims) SetNonce(v []byte) error {
 // SetNonceAdjustFn sets the nonce adjustment algorithm.
 func (c *Claims) SetNonceAdjustFn(alg string) error {
 	if c == nil {
-		return errors.New("nil claims")
+		return errNilClaims
 	}
 
 	switch alg {
@@ -173,7 +187,7 @@ func (c *Claims) SetNonceAdjustFn(alg string) error {
 		c.NonceAdjustFunction = &alg
 		return nil
 	case "":
-		return errors.New(`invalid claim "vnd.veraison.nonce_adjust_function": empty value`)
+		return errEmptyNonceAdjustFunction
 	default:
 		return fmt.Errorf(`invalid claim "vnd.veraison.nonce_adjust_function": %q`, alg)
 	}
@@ -182,11 +196,11 @@ func (c *Claims) SetNonceAdjustFn(alg string) error {
 // SetKeyandNonceSz sets the nonce-adjusted size for a given key.
 func (c *Claims) SetKeyandNonceSz(key string, sz uint) error {
 	if c == nil {
-		return errors.New("nil claims")
+		return errNilClaims
 	}
 
 	if key == "" {
-		return errors.New(`invalid claim "vnd.veraison.nonce_adjust_map": empty key`)
+		return errEmptyNonceAdjustMapKey
 	}
 
 	if c.NonceAdjustMap == nil {
@@ -221,7 +235,7 @@ func toCMW(v interface{}) (cmw.CMW, error) {
 
 	if value.Kind() == reflect.Ptr {
 		if value.IsNil() {
-			return cmw.CMW{}, errors.New(`invalid claim "cmw": nil value`)
+			return cmw.CMW{}, errNilCMWValue
 		}
 
 		elem := value.Elem()
@@ -250,18 +264,18 @@ func NewEvidence() *Evidence {
 // Valid checks whether the Evidence matches the legacy RATSD token shape.
 func (e *Evidence) Valid() error {
 	if e == nil {
-		return errors.New("nil evidence")
+		return errNilEvidence
 	}
 
 	c := e.Claims
 
 	if c.EatProfile == nil {
-		return errors.New(`missing mandatory claim "eat_profile"`)
+		return errMissingEatProfile
 	}
 
 	profile, err := c.EatProfile.Get()
 	if err != nil {
-		return errors.New(`missing mandatory claim "eat_profile"`)
+		return errMissingEatProfile
 	}
 
 	if profile != LegacyProfile {
@@ -269,7 +283,7 @@ func (e *Evidence) Valid() error {
 	}
 
 	if c.EatNonce == nil || c.EatNonce.Len() == 0 {
-		return errors.New(`missing mandatory claim "eat_nonce"`)
+		return errMissingEatNonce
 	}
 
 	if err := c.EatNonce.Validate(); err != nil {
@@ -277,7 +291,7 @@ func (e *Evidence) Valid() error {
 	}
 
 	if c.CMW == "" {
-		return errors.New(`missing mandatory claim "cmw"`)
+		return errMissingCMW
 	}
 
 	if _, err := decodeLegacyCMW(c.CMW); err != nil {
@@ -285,7 +299,7 @@ func (e *Evidence) Valid() error {
 	}
 	if c.NonceAdjustFunction != nil {
 		if *c.NonceAdjustFunction == "" {
-			return errors.New(`invalid claim "vnd.veraison.nonce_adjust_function": empty value`)
+			return errEmptyNonceAdjustFunction
 		}
 
 		if *c.NonceAdjustFunction != NonceAdjustFunctionShake128 &&
@@ -294,17 +308,17 @@ func (e *Evidence) Valid() error {
 		}
 
 		if c.NonceAdjustMap == nil {
-			return errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_map"`)
+			return errMissingNonceAdjustMap
 		}
 	}
 
 	if c.NonceAdjustMap != nil {
 		if len(c.NonceAdjustMap) == 0 {
-			return errors.New(`invalid claim "vnd.veraison.nonce_adjust_map": must contain at least one entry`)
+			return errEmptyNonceAdjustMap
 		}
 
 		if c.NonceAdjustFunction == nil {
-			return errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_function"`)
+			return errMissingNonceAdjustFunction
 		}
 	}
 
