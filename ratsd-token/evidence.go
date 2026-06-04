@@ -128,6 +128,7 @@ func (c *Claims) GetNonceAdjustMap() map[string]uint {
 }
 
 // GetKeyandNonceSz returns the configured adjusted nonce size for the given key.
+// The boolean result reports whether the key was present in the nonce-adjust map.
 func (c *Claims) GetKeyandNonceSz(key string) (uint, bool) {
 	if c == nil || c.NonceAdjustMap == nil {
 		return 0, false
