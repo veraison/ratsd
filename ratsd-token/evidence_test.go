@@ -243,17 +243,41 @@ func TestEvidenceGetClaimsFail(t *testing.T) {
 	assert.Equal(t, Claims{}, claims)
 }
 
-func TestEvidenceGetClaimsNilEvidence(t *testing.T) {
-	var evidence *Evidence
+func TestEvidenceGetClaimsZeroValue(t *testing.T) {
+	var evidence Evidence
 
 	claims, err := evidence.GetClaims()
 
-	assert.EqualError(t, err, "nil evidence")
+	assert.EqualError(t, err, `validation failed: missing mandatory claim "eat_profile"`)
 	assert.Equal(t, Claims{}, claims)
 }
 
-func TestClaimsGettersNilSafe(t *testing.T) {
-	var claimSet *Claims
+func TestEvidenceGetClaimsReturnsCopy(t *testing.T) {
+	evidence := validEvidence()
+	fn := NonceAdjustFunctionShake128
+	evidence.Claims.NonceAdjustFunction = &fn
+	evidence.Claims.NonceAdjustMap = map[string]uint{
+		"configfs-tsm": 32,
+	}
+
+	claims, err := evidence.GetClaims()
+	assert.NoError(t, err)
+
+	assert.NoError(t, claims.EatProfile.Set("tag:github.com,2026:veraison/ratsd/v2"))
+	claims.EatNonce.GetI(0)[0] = 'x'
+	*claims.NonceAdjustFunction = NonceAdjustFunctionShake256
+	claims.NonceAdjustMap["configfs-tsm"] = 64
+
+	profile, err := evidence.Claims.EatProfile.Get()
+	assert.NoError(t, err)
+	assert.Equal(t, LegacyProfile, profile)
+	assert.Equal(t, []byte("12345678"), evidence.Claims.EatNonce.GetI(0))
+	assert.Equal(t, NonceAdjustFunctionShake128, *evidence.Claims.NonceAdjustFunction)
+	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, evidence.Claims.NonceAdjustMap)
+}
+
+func TestClaimsGettersZeroValue(t *testing.T) {
+	var claimSet Claims
 
 	assert.Nil(t, claimSet.GetEatProfile())
 	assert.Nil(t, claimSet.GetEatNonce())
@@ -273,8 +297,19 @@ func TestClaimsGettersPass(t *testing.T) {
 		"configfs-tsm": 32,
 	}
 
-	assert.Same(t, evidence.Claims.EatProfile, evidence.Claims.GetEatProfile())
-	assert.Same(t, evidence.Claims.EatNonce, evidence.Claims.GetEatNonce())
+	profile := evidence.Claims.GetEatProfile()
+	if assert.NotNil(t, profile) {
+		profileValue, err := profile.Get()
+		assert.NoError(t, err)
+		assert.Equal(t, LegacyProfile, profileValue)
+	}
+
+	nonce := evidence.Claims.GetEatNonce()
+	if assert.NotNil(t, nonce) {
+		assert.Equal(t, 1, nonce.Len())
+		assert.Equal(t, []byte("12345678"), nonce.GetI(0))
+	}
+
 	expectedCMW, _ := makeLegacyCMW(t)
 	assertCMWEquivalent(t, expectedCMW, evidence.Claims.GetCMW())
 	assert.Equal(t, NonceAdjustFunctionShake128, evidence.Claims.GetNonceAdjustFn())
@@ -282,6 +317,32 @@ func TestClaimsGettersPass(t *testing.T) {
 	sz, ok := evidence.Claims.GetKeyandNonceSz("configfs-tsm")
 	assert.True(t, ok)
 	assert.Equal(t, uint(32), sz)
+}
+
+func TestClaimsGettersReturnCopies(t *testing.T) {
+	evidence := validEvidence()
+	fn := NonceAdjustFunctionShake128
+	evidence.Claims.NonceAdjustFunction = &fn
+	evidence.Claims.NonceAdjustMap = map[string]uint{
+		"configfs-tsm": 32,
+	}
+
+	profile := evidence.Claims.GetEatProfile()
+	nonce := evidence.Claims.GetEatNonce()
+	nonceAdjustMap := evidence.Claims.GetNonceAdjustMap()
+	if !assert.NotNil(t, profile) || !assert.NotNil(t, nonce) || !assert.NotNil(t, nonceAdjustMap) {
+		return
+	}
+
+	assert.NoError(t, profile.Set("tag:github.com,2026:veraison/ratsd/v2"))
+	nonce.GetI(0)[0] = 'x'
+	nonceAdjustMap["configfs-tsm"] = 64
+
+	profileValue, err := evidence.Claims.EatProfile.Get()
+	assert.NoError(t, err)
+	assert.Equal(t, LegacyProfile, profileValue)
+	assert.Equal(t, []byte("12345678"), evidence.Claims.EatNonce.GetI(0))
+	assert.Equal(t, map[string]uint{"configfs-tsm": 32}, evidence.Claims.NonceAdjustMap)
 }
 
 func TestEvidenceValidFailWrongProfile(t *testing.T) {

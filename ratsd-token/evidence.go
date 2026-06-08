@@ -53,17 +53,18 @@ func (e *Evidence) SetClaims(c Claims) error {
 	return nil
 }
 
-// GetClaims returns the stored claims after validating the evidence state.
-func (e *Evidence) GetClaims() (c Claims, err error) {
-	if e == nil {
-		return c, errNilEvidence
-	}
-
+// GetClaims returns a copy of the stored claims after validating the evidence state.
+func (e Evidence) GetClaims() (c Claims, err error) {
 	if err = e.Valid(); err != nil {
 		return c, fmt.Errorf("validation failed: %w", err)
 	}
 
-	return e.Claims, nil
+	c, err = cloneClaims(e.Claims)
+	if err != nil {
+		return c, fmt.Errorf("claims copy failed: %w", err)
+	}
+
+	return c, nil
 }
 
 // Claims contains the legacy RATSD token claims defined in docs/ratsd-token.cddl.
@@ -75,27 +76,100 @@ type Claims struct {
 	NonceAdjustMap      map[string]uint `json:"vnd.veraison.nonce_adjust_map,omitempty"`
 }
 
+func cloneClaims(c Claims) (Claims, error) {
+	clone := Claims{
+		CMW: c.CMW,
+	}
+
+	if c.EatProfile != nil {
+		profile, err := cloneEatProfile(c.EatProfile)
+		if err != nil {
+			return clone, fmt.Errorf(`invalid claim "eat_profile": %w`, err)
+		}
+		clone.EatProfile = profile
+	}
+
+	if c.EatNonce != nil {
+		nonce, err := cloneEatNonce(c.EatNonce)
+		if err != nil {
+			return clone, fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
+		}
+		clone.EatNonce = nonce
+	}
+
+	if c.NonceAdjustFunction != nil {
+		nonceAdjustFunction := *c.NonceAdjustFunction
+		clone.NonceAdjustFunction = &nonceAdjustFunction
+	}
+
+	if c.NonceAdjustMap != nil {
+		clone.NonceAdjustMap = cloneNonceAdjustMap(c.NonceAdjustMap)
+	}
+
+	return clone, nil
+}
+
+func cloneEatProfile(v *eat.Profile) (*eat.Profile, error) {
+	profileValue, err := v.Get()
+	if err != nil {
+		return nil, err
+	}
+
+	return eat.NewProfile(profileValue)
+}
+
+func cloneEatNonce(v *eat.Nonce) (*eat.Nonce, error) {
+	var nonce eat.Nonce
+	for i := 0; i < v.Len(); i++ {
+		value := v.GetI(i)
+		if err := nonce.Add(append([]byte(nil), value...)); err != nil {
+			return nil, err
+		}
+	}
+
+	return &nonce, nil
+}
+
+func cloneNonceAdjustMap(v map[string]uint) map[string]uint {
+	clone := make(map[string]uint, len(v))
+	for k, value := range v {
+		clone[k] = value
+	}
+
+	return clone
+}
+
 // GetEatProfile returns the EAT profile claim.
-func (c *Claims) GetEatProfile() *eat.Profile {
-	if c == nil {
+func (c Claims) GetEatProfile() *eat.Profile {
+	if c.EatProfile == nil {
 		return nil
 	}
 
-	return c.EatProfile
+	profile, err := cloneEatProfile(c.EatProfile)
+	if err != nil {
+		return nil
+	}
+
+	return profile
 }
 
 // GetEatNonce returns the EAT nonce claim.
-func (c *Claims) GetEatNonce() *eat.Nonce {
-	if c == nil {
+func (c Claims) GetEatNonce() *eat.Nonce {
+	if c.EatNonce == nil {
 		return nil
 	}
 
-	return c.EatNonce
+	nonce, err := cloneEatNonce(c.EatNonce)
+	if err != nil {
+		return nil
+	}
+
+	return nonce
 }
 
 // GetCMW returns the legacy CMW collection claim.
-func (c *Claims) GetCMW() *cmw.CMW {
-	if c == nil || c.CMW == "" {
+func (c Claims) GetCMW() *cmw.CMW {
+	if c.CMW == "" {
 		return nil
 	}
 
@@ -108,27 +182,27 @@ func (c *Claims) GetCMW() *cmw.CMW {
 }
 
 // GetNonceAdjustFn returns the nonce adjustment algorithm, if set.
-func (c *Claims) GetNonceAdjustFn() string {
-	if c == nil || c.NonceAdjustFunction == nil {
+func (c Claims) GetNonceAdjustFn() string {
+	if c.NonceAdjustFunction == nil {
 		return ""
 	}
 
 	return *c.NonceAdjustFunction
 }
 
-// GetNonceAdjustMap returns the nonce adjustment map.
-func (c *Claims) GetNonceAdjustMap() map[string]uint {
-	if c == nil {
+// GetNonceAdjustMap returns a copy of the nonce adjustment map.
+func (c Claims) GetNonceAdjustMap() map[string]uint {
+	if c.NonceAdjustMap == nil {
 		return nil
 	}
 
-	return c.NonceAdjustMap
+	return cloneNonceAdjustMap(c.NonceAdjustMap)
 }
 
 // GetKeyandNonceSz returns the configured adjusted nonce size for the given key.
 // The boolean result reports whether the key was present in the nonce-adjust map.
-func (c *Claims) GetKeyandNonceSz(key string) (uint, bool) {
-	if c == nil || c.NonceAdjustMap == nil {
+func (c Claims) GetKeyandNonceSz(key string) (uint, bool) {
+	if c.NonceAdjustMap == nil {
 		return 0, false
 	}
 
