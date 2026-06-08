@@ -29,7 +29,6 @@ var (
 	errMissingEatProfile          = errors.New(`missing mandatory claim "eat_profile"`)
 	errMissingEatNonce            = errors.New(`missing mandatory claim "eat_nonce"`)
 	errMissingCMW                 = errors.New(`missing mandatory claim "cmw"`)
-	errMissingNonceAdjustMap      = errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_map"`)
 	errMissingNonceAdjustFunction = errors.New(`missing mandatory claim "vnd.veraison.nonce_adjust_function"`)
 )
 
@@ -305,10 +304,6 @@ func (e *Evidence) Valid() error {
 		if *c.NonceAdjustFunction != NonceAdjustFunctionShake128 &&
 			*c.NonceAdjustFunction != NonceAdjustFunctionShake256 {
 			return fmt.Errorf(`invalid claim "vnd.veraison.nonce_adjust_function": %q`, *c.NonceAdjustFunction)
-		}
-
-		if c.NonceAdjustMap == nil {
-			return errMissingNonceAdjustMap
 		}
 	}
 

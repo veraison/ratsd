@@ -302,12 +302,12 @@ func TestEvidenceValidPassEmptyNonceAdjustMap(t *testing.T) {
 	assert.NoError(t, evidence.Valid())
 }
 
-func TestEvidenceValidFailIncompleteNonceAdjustGroup(t *testing.T) {
+func TestEvidenceValidPassNilNonceAdjustMap(t *testing.T) {
 	evidence := validEvidence()
 	fn := NonceAdjustFunctionShake256
 	evidence.Claims.NonceAdjustFunction = &fn
 
-	assert.EqualError(t, evidence.Valid(), `missing mandatory claim "vnd.veraison.nonce_adjust_map"`)
+	assert.NoError(t, evidence.Valid())
 }
 
 func TestEvidenceJSONSerDesPass(t *testing.T) {
