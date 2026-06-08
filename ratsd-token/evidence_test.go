@@ -49,7 +49,7 @@ func makeLegacyCMWForTest() (*cmw.CMW, string) {
 		panic(err)
 	}
 
-	return collection, base64.RawURLEncoding.EncodeToString(encoded)
+	return collection, base64.StdEncoding.EncodeToString(encoded)
 }
 
 func makeLegacyCMW(t *testing.T) (*cmw.CMW, string) {

@@ -137,7 +137,7 @@ func (c *Claims) GetKeyandNonceSz(key string) (uint, bool) {
 	return sz, ok
 }
 
-// SetCMW serializes the supplied CMW object into the legacy base64url claim form.
+// SetCMW serializes the supplied CMW object into the legacy base64 claim form.
 func (c *Claims) SetCMW(v interface{}) error {
 	if c == nil {
 		return errNilClaims
@@ -157,7 +157,7 @@ func (c *Claims) SetCMW(v interface{}) error {
 		return fmt.Errorf(`invalid claim "cmw": %w`, err)
 	}
 
-	c.CMW = base64.RawURLEncoding.EncodeToString(encoded)
+	c.CMW = base64.StdEncoding.EncodeToString(encoded)
 	return nil
 }
 
@@ -212,9 +212,9 @@ func (c *Claims) SetKeyandNonceSz(key string, sz uint) error {
 }
 
 func decodeLegacyCMW(v string) (*cmw.CMW, error) {
-	b, err := base64.RawURLEncoding.DecodeString(v)
+	b, err := base64.StdEncoding.DecodeString(v)
 	if err != nil {
-		return nil, fmt.Errorf("CMW base64url decoding failed: %w", err)
+		return nil, fmt.Errorf("CMW base64 decoding failed: %w", err)
 	}
 
 	var decoded cmw.CMW
