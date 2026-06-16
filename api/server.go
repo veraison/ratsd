@@ -3,6 +3,7 @@
 package api
 
 import (
+	"crypto/sha3"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 const (
 	ApplicationvndVeraisonCharesJson string = "application/vnd.veraison.chares+json"
 	JsonType                         string = "application/json"
+	nonceAdjustFunction              string = ratsdtoken.NonceAdjustFunctionShake256
 )
 
 type Server struct {
@@ -39,6 +41,23 @@ func responseCodeToHTTP(responseCode uint32) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func adjustNonce(nonce []byte, size uint32) ([]byte, error) {
+	if size == 0 {
+		return nil, fmt.Errorf("nonce size must be greater than zero")
+	}
+
+	adjusted := make([]byte, int(size))
+	h := sha3.NewSHAKE256()
+	if _, err := h.Write(nonce); err != nil {
+		return nil, err
+	}
+	if _, err := h.Read(adjusted); err != nil {
+		return nil, err
+	}
+
+	return adjusted, nil
 }
 
 func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
@@ -214,7 +233,8 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		outputCt := formatOut.Formats[0].ContentType
+		selectedFormat := formatOut.Formats[0]
+		outputCt := selectedFormat.ContentType
 		params, hasOption := options[pn]
 		if !hasOption || string(params) == "null" {
 			params = json.RawMessage{}
@@ -237,7 +257,8 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			if desiredCt, ok := attesterOptions["content-type"]; ok {
 				for _, f := range formatOut.Formats {
 					if f.ContentType == desiredCt {
-						outputCt = desiredCt
+						selectedFormat = f
+						outputCt = selectedFormat.ContentType
 						validCt = true
 						break
 					}
@@ -259,9 +280,32 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 
 		s.logger.Info(pn, " output content type: ", outputCt)
+		attesterNonce, err := adjustNonce(nonce, selectedFormat.NonceSize)
+		if err != nil {
+			errMsg := fmt.Sprintf(
+				"failed to adjust nonce for attester %s: %s", pn, err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
+
+		if err := evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction); err != nil {
+			errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
+
+		if err := evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize)); err != nil {
+			errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
+
 		in := &compositor.EvidenceIn{
 			ContentType: outputCt,
-			Nonce:       nonce,
+			Nonce:       attesterNonce,
 			Options:     params,
 		}
 
