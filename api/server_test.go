@@ -19,6 +19,7 @@ import (
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
 	"github.com/veraison/ratsd/attesters/tsm"
+	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
 	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
@@ -27,6 +28,19 @@ const (
 	jsonType   = "application/json"
 	validNonce = "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA"
 )
+
+func decodeCharesClaims(t *testing.T, body []byte) ratsdtoken.Claims {
+	t.Helper()
+
+	var evidence ratsdtoken.Evidence
+	err := json.Unmarshal(body, &evidence)
+	assert.NoError(t, err)
+
+	claims, err := evidence.GetClaims()
+	assert.NoError(t, err)
+
+	return claims
+}
 
 func TestRatsdSubattesters_valid_requests(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -294,19 +308,22 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, expectedCode, w.Code)
 			assert.Equal(t, expectedType, w.Result().Header.Get("Content-Type"))
 
-			var out map[string]string
-			err := json.Unmarshal(w.Body.Bytes(), &out)
-			assert.NoError(t, err)
-			assert.Equal(t, string(TagGithubCom2024Veraisonratsd), out["eat_profile"])
-			assert.Equal(t, validNonce, out["eat_nonce"])
-			assert.Contains(t, out, "cmw")
+			claims := decodeCharesClaims(t, w.Body.Bytes())
 
-			data, err := base64.StdEncoding.DecodeString(out["cmw"])
+			profile, err := claims.EatProfile.Get()
 			assert.NoError(t, err)
+			assert.Equal(t, ratsdtoken.LegacyProfile, profile)
 
-			collection := &cmw.CMW{}
-			err = collection.UnmarshalJSON([]byte(data))
-			assert.NoError(t, err)
+			nonce := claims.GetEatNonce()
+			if assert.NotNil(t, nonce) {
+				assert.Equal(t, 1, nonce.Len())
+				assert.Equal(t, realNonce, nonce.GetI(0))
+			}
+
+			collection := claims.GetCMW()
+			if !assert.NotNil(t, collection) {
+				return
+			}
 			assert.Equal(t, cmw.KindCollection, collection.GetKind())
 
 			c, err := collection.GetCollectionItem("mock-tsm")
@@ -353,20 +370,14 @@ func TestRatsdChares_valid_request_selected_attesters(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
 
-	var out map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &out)
-	assert.NoError(t, err)
-	assert.Contains(t, out, "cmw")
-
-	data, err := base64.StdEncoding.DecodeString(out["cmw"])
-	assert.NoError(t, err)
-
-	collection := &cmw.CMW{}
-	err = collection.UnmarshalJSON([]byte(data))
-	assert.NoError(t, err)
+	claims := decodeCharesClaims(t, w.Body.Bytes())
+	collection := claims.GetCMW()
+	if !assert.NotNil(t, collection) {
+		return
+	}
 	assert.Equal(t, cmw.KindCollection, collection.GetKind())
 
-	_, err = collection.GetCollectionItem("mock-tsm")
+	_, err := collection.GetCollectionItem("mock-tsm")
 	assert.NoError(t, err)
 
 	_, err = collection.GetCollectionItem("other-tsm")
@@ -399,20 +410,14 @@ func TestRatsdChares_valid_request_selected_attesters_in_all_mode(t *testing.T) 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
 
-	var out map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &out)
-	assert.NoError(t, err)
-	assert.Contains(t, out, "cmw")
-
-	data, err := base64.StdEncoding.DecodeString(out["cmw"])
-	assert.NoError(t, err)
-
-	collection := &cmw.CMW{}
-	err = collection.UnmarshalJSON([]byte(data))
-	assert.NoError(t, err)
+	claims := decodeCharesClaims(t, w.Body.Bytes())
+	collection := claims.GetCMW()
+	if !assert.NotNil(t, collection) {
+		return
+	}
 	assert.Equal(t, cmw.KindCollection, collection.GetKind())
 
-	_, err = collection.GetCollectionItem("mock-tsm")
+	_, err := collection.GetCollectionItem("mock-tsm")
 	assert.NoError(t, err)
 
 	_, err = collection.GetCollectionItem("other-tsm")

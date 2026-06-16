@@ -13,6 +13,7 @@ import (
 	"github.com/veraison/cmw"
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
+	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
 	"go.uber.org/zap"
 )
 
@@ -170,11 +171,20 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	s.logger.Info("request nonce: ", requestNonce)
 	s.logger.Info("request media type: ", *(param.Accept))
 
-	// Use a map until we finalize ratsd output format
-	eat := make(map[string]interface{})
+	evidence := ratsdtoken.NewEvidence()
+	if err := evidence.Claims.SetNonce(nonce); err != nil {
+		errMsg := fmt.Sprintf("invalid nonce in the request: %s", err.Error())
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
+
 	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
-	eat["eat_profile"] = TagGithubCom2024Veraisonratsd
-	eat["eat_nonce"] = requestNonce
 	pl := s.manager.GetPluginList()
 	if len(pl) == 0 {
 		errMsg := "no sub-attester available"
@@ -288,17 +298,24 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
-	serialized, err := collection.MarshalJSON()
-	if err != nil {
+	if err := evidence.Claims.SetCMW(collection); err != nil {
 		errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
 		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 		s.reportProblem(w, p)
 		return
 	}
-	eat["cmw"] = serialized
+
+	response, err := json.Marshal(evidence)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to serialize RATSD token: %s", err.Error())
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		s.reportProblem(w, p)
+		return
+	}
+
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(eat)
+	w.Write(response)
 }
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
