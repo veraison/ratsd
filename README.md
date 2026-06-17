@@ -8,11 +8,10 @@ The binary ratsd is built by using make using the following steps:
 - Ensure GOPATH is available in the shell path (export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin)
 - Build RATSd using make
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
-Regeneration of the code for ratsd requires the installation of various protobuf packages beforehand. Use the following commands to install them:
+Regenerate the generated ratsd core code after changing the OpenAPI spec with:
 ```bash
-make install-tools
+make generate
 ```
-Then generate the code with `make generate`
 
 ## Building ratsd core and leaf attesters
 
