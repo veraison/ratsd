@@ -286,20 +286,24 @@ func TestProtectedHeadersX5ChainArrayRoundTrip(t *testing.T) {
 func TestEvidenceSignAndVerify(t *testing.T) {
 	signer, verifier := testSignerVerifier(t)
 	evidence := validEvidence()
-	evidence.Signature = nil
-	evidence.ProtectedHeaders.Algorithm = nil
+	evidence.message.Signature = nil
+	delete(evidence.message.Headers.Protected, cose.HeaderLabelAlgorithm)
 
 	encoded, err := evidence.Sign(signer)
 	require.NoError(t, err)
 	assert.NotEmpty(t, encoded)
 	assert.NotEmpty(t, evidence.GetSignature())
-	alg, ok := evidence.ProtectedHeaders.GetAlgorithm()
-	require.True(t, ok)
+	assert.NotEmpty(t, evidence.message.Payload)
+	alg, err := evidence.message.Headers.Protected.Algorithm()
+	require.NoError(t, err)
 	assert.Equal(t, cose.AlgorithmEdDSA, alg)
 	assert.NoError(t, evidence.Verify(verifier))
 
 	var decoded Evidence
 	require.NoError(t, decoded.FromCBOR(encoded))
+	alg, err = decoded.message.Headers.Protected.Algorithm()
+	require.NoError(t, err)
+	assert.Equal(t, cose.AlgorithmEdDSA, alg)
 	assert.NoError(t, decoded.Verify(verifier))
 	decoded.Claims.EatNonce[0] = 'x'
 	assert.Error(t, decoded.Verify(verifier))

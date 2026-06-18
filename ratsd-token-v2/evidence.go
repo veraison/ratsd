@@ -78,13 +78,12 @@ type Evidence struct {
 	ProtectedHeaders ProtectedHeaders
 	Claims           Claims
 	Collection       cmw.CMW
-	Signature        []byte
+	message          cose.Sign1Message
 }
 
 // ProtectedHeaders contains the protected COSE header map.
 type ProtectedHeaders struct {
-	Algorithm *cose.Algorithm
-	X5Chain   [][]byte
+	X5Chain [][]byte
 }
 
 // Claims contains the tagged EAT claims embedded in the RATSD CMW collection.
@@ -107,7 +106,7 @@ func NewEvidence() *Evidence {
 			EatProfile: Profile,
 		},
 		Collection: *collection,
-		Signature:  []byte{},
+		message:    newSign1Message(),
 	}
 }
 
@@ -200,33 +199,19 @@ func (e *Evidence) SetToken(key string, mediaType string, token []byte, indicato
 	return nil
 }
 
-// SetSignature stores the COSE_Sign1 signature bytes.
+// SetSignature stores the COSE_Sign1 signature bytes in the embedded message.
 func (e *Evidence) SetSignature(signature []byte) error {
 	if e == nil {
 		return errNilEvidence
 	}
 
-	e.Signature = bytesOrEmpty(signature)
+	e.message.Signature = bytesOrEmpty(signature)
 	return nil
 }
 
 // GetSignature returns a copy of the COSE_Sign1 signature bytes.
 func (e Evidence) GetSignature() []byte {
-	return bytesOrEmpty(e.Signature)
-}
-
-// SetAlgorithm stores the COSE signing algorithm protected header.
-func (h *ProtectedHeaders) SetAlgorithm(alg cose.Algorithm) {
-	h.Algorithm = &alg
-}
-
-// GetAlgorithm returns the COSE signing algorithm protected header.
-func (h ProtectedHeaders) GetAlgorithm() (cose.Algorithm, bool) {
-	if h.Algorithm == nil {
-		return 0, false
-	}
-
-	return *h.Algorithm, true
+	return bytesOrEmpty(e.message.Signature)
 }
 
 // SetX5Chain stores the x5chain protected header. A single certificate is
@@ -418,8 +403,8 @@ func (e *Evidence) FromCBOR(data []byte) error {
 }
 
 // Sign signs the Evidence collection as a COSE_Sign1 token using the supplied
-// go-cose signer. The generated signature and algorithm are stored on the
-// Evidence instance, and the serialized token is returned.
+// go-cose signer. The generated COSE_Sign1 message is stored on the Evidence
+// instance, and the serialized token is returned.
 func (e *Evidence) Sign(signer cose.Signer) ([]byte, error) {
 	if e == nil {
 		return nil, errNilEvidence
@@ -444,9 +429,7 @@ func (e *Evidence) Sign(signer cose.Signer) ([]byte, error) {
 		return nil, fmt.Errorf("COSE Sign1 signing failed: %w", err)
 	}
 
-	e.Signature = cloneBytes(msg.Signature)
-	alg := signer.Algorithm()
-	e.ProtectedHeaders.Algorithm = &alg
+	e.message = cloneSign1Message(*msg)
 
 	token, err := msg.MarshalCBOR()
 	if err != nil {
@@ -529,7 +512,7 @@ func (e *Evidence) UnmarshalCBOR(data []byte) error {
 		ProtectedHeaders: protectedHeaders,
 		Claims:           claims,
 		Collection:       collection,
-		Signature:        bytesOrEmpty(msg.Signature),
+		message:          cloneSign1Message(msg),
 	}
 
 	if err := tmp.Valid(); err != nil {
@@ -676,18 +659,44 @@ func (e Evidence) payloadCBOR() ([]byte, error) {
 	return marshalPayload(e.Claims, e.Collection)
 }
 
+func newSign1Message() cose.Sign1Message {
+	return *cose.NewSign1Message()
+}
+
 func (e Evidence) sign1Message(payload []byte) (*cose.Sign1Message, error) {
 	headers, err := e.ProtectedHeaders.toCOSEHeaders()
 	if err != nil {
 		return nil, err
 	}
 
+	if alg, ok, err := e.sign1Algorithm(); err != nil {
+		return nil, err
+	} else if ok {
+		headers.Protected.SetAlgorithm(alg)
+	}
+
 	msg := cose.NewSign1Message()
 	msg.Headers = headers
 	msg.Payload = bytesOrEmpty(payload)
-	msg.Signature = cloneBytes(e.Signature)
+	msg.Signature = cloneBytes(e.message.Signature)
 
 	return msg, nil
+}
+
+func (e Evidence) sign1Algorithm() (cose.Algorithm, bool, error) {
+	if e.message.Headers.Protected == nil {
+		return 0, false, nil
+	}
+
+	alg, err := e.message.Headers.Protected.Algorithm()
+	switch {
+	case err == nil:
+		return alg, true, nil
+	case errors.Is(err, cose.ErrAlgorithmNotFound):
+		return 0, false, nil
+	default:
+		return 0, false, fmt.Errorf(`invalid protected header "alg": %w`, err)
+	}
 }
 
 func (h ProtectedHeaders) toCOSEHeaders() (cose.Headers, error) {
@@ -708,10 +717,6 @@ func (h ProtectedHeaders) toCOSEProtectedHeader() (cose.ProtectedHeader, error) 
 	}
 
 	protected := cose.ProtectedHeader{}
-	if h.Algorithm != nil {
-		protected.SetAlgorithm(*h.Algorithm)
-	}
-
 	switch len(h.X5Chain) {
 	case 0:
 	case 1:
@@ -734,11 +739,9 @@ func protectedHeadersFromCOSE(protected cose.ProtectedHeader) (ProtectedHeaders,
 
 		switch label {
 		case cose.HeaderLabelAlgorithm:
-			alg, err := protected.Algorithm()
-			if err != nil {
+			if _, err := protected.Algorithm(); err != nil {
 				return ProtectedHeaders{}, fmt.Errorf(`invalid protected header "alg": %w`, err)
 			}
-			decoded.Algorithm = &alg
 		case cose.HeaderLabelX5Chain:
 			x5chain, err := x5ChainFromHeaderValue(value)
 			if err != nil {
@@ -1085,6 +1088,64 @@ func cloneNonceAdjustMap(v map[string]uint) map[string]uint {
 	}
 
 	return clone
+}
+
+func cloneSign1Message(v cose.Sign1Message) cose.Sign1Message {
+	clone := cose.Sign1Message{
+		Headers: cose.Headers{
+			RawProtected:   cloneBytes(v.Headers.RawProtected),
+			RawUnprotected: cloneBytes(v.Headers.RawUnprotected),
+			Protected:      cloneProtectedHeader(v.Headers.Protected),
+			Unprotected:    cloneUnprotectedHeader(v.Headers.Unprotected),
+		},
+		Payload:   cloneBytes(v.Payload),
+		Signature: cloneBytes(v.Signature),
+	}
+
+	return clone
+}
+
+func cloneProtectedHeader(v cose.ProtectedHeader) cose.ProtectedHeader {
+	if v == nil {
+		return nil
+	}
+
+	clone := make(cose.ProtectedHeader, len(v))
+	for key, value := range v {
+		clone[key] = cloneHeaderValue(value)
+	}
+
+	return clone
+}
+
+func cloneUnprotectedHeader(v cose.UnprotectedHeader) cose.UnprotectedHeader {
+	if v == nil {
+		return nil
+	}
+
+	clone := make(cose.UnprotectedHeader, len(v))
+	for key, value := range v {
+		clone[key] = cloneHeaderValue(value)
+	}
+
+	return clone
+}
+
+func cloneHeaderValue(v any) any {
+	switch typed := v.(type) {
+	case []byte:
+		return cloneBytes(typed)
+	case [][]byte:
+		return cloneByteSlices(typed)
+	case []any:
+		clone := make([]any, len(typed))
+		for i, value := range typed {
+			clone[i] = cloneHeaderValue(value)
+		}
+		return clone
+	default:
+		return typed
+	}
 }
 
 func cloneCMW(v cmw.CMW) (cmw.CMW, error) {
