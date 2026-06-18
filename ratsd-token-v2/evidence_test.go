@@ -5,7 +5,11 @@ package ratsdtokenv2
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +42,7 @@ func validEvidence() *Evidence {
 		panic(err)
 	}
 
-	evidence.ProtectedHeaders.SetX5Chain([]byte{0xff})
+	evidence.SigningCert = mustTestCertificate(1)
 	if err := evidence.SetSignature([]byte{0xee}); err != nil {
 		panic(err)
 	}
@@ -49,7 +53,8 @@ func validEvidence() *Evidence {
 func assertEvidenceEquivalent(t *testing.T, expected, actual *Evidence) {
 	t.Helper()
 
-	assert.Equal(t, expected.ProtectedHeaders.GetX5Chain(), actual.ProtectedHeaders.GetX5Chain())
+	assertCertificateEqual(t, expected.SigningCert, actual.SigningCert)
+	assertIntermediateCertsEqual(t, expected.IntermediateCerts, actual.IntermediateCerts)
 	assert.Equal(t, expected.Claims.GetEatProfile(), actual.Claims.GetEatProfile())
 	assert.Equal(t, expected.Claims.GetEatNonce(), actual.Claims.GetEatNonce())
 	assert.Equal(t, expected.Claims.GetNonceAdjustFn(), actual.Claims.GetNonceAdjustFn())
@@ -58,12 +63,60 @@ func assertEvidenceEquivalent(t *testing.T, expected, actual *Evidence) {
 	assert.Equal(t, expected.GetSignature(), actual.GetSignature())
 }
 
+func assertCertificateEqual(t *testing.T, expected, actual *x509.Certificate) {
+	t.Helper()
+
+	if expected == nil || actual == nil {
+		assert.Equal(t, expected, actual)
+		return
+	}
+
+	assert.Equal(t, expected.Raw, actual.Raw)
+}
+
+func assertIntermediateCertsEqual(t *testing.T, expected, actual []*x509.Certificate) {
+	t.Helper()
+
+	require.Len(t, actual, len(expected))
+	for i := range expected {
+		assertCertificateEqual(t, expected[i], actual[i])
+	}
+}
+
 func mustMarshalCMW(t *testing.T, collection cmw.CMW) []byte {
 	t.Helper()
 
 	encoded, err := collection.MarshalCBOR()
 	require.NoError(t, err)
 	return encoded
+}
+
+func mustTestCertificate(serial int64) *x509.Certificate {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber:          big.NewInt(serial),
+		Subject:               pkix.Name{CommonName: "ratsd-token-v2-test"},
+		NotBefore:             time.Unix(0, 0),
+		NotAfter:              time.Unix(1893456000, 0),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey, privateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		panic(err)
+	}
+
+	return cert
 }
 
 func testSignerVerifier(t *testing.T) (cose.Signer, cose.Verifier) {
@@ -85,6 +138,8 @@ func TestNewEvidence(t *testing.T) {
 	evidence := NewEvidence()
 
 	assert.Equal(t, Profile, evidence.Claims.GetEatProfile())
+	assert.Nil(t, evidence.SigningCert)
+	assert.Empty(t, evidence.IntermediateCerts)
 	meta, err := evidence.Collection.GetCollectionMeta()
 	require.NoError(t, err)
 	assert.Empty(t, meta)
@@ -270,9 +325,10 @@ func TestEvidenceValidFailNoCollectionRecords(t *testing.T) {
 	assert.EqualError(t, evidence.Valid(), "missing mandatory CMW collection record")
 }
 
-func TestProtectedHeadersX5ChainArrayRoundTrip(t *testing.T) {
+func TestEvidenceX5ChainArrayRoundTrip(t *testing.T) {
 	evidence := validEvidence()
-	evidence.ProtectedHeaders.SetX5Chain([]byte{0x01}, []byte{0x02})
+	evidence.SigningCert = mustTestCertificate(2)
+	evidence.IntermediateCerts = []*x509.Certificate{mustTestCertificate(3)}
 
 	encoded, err := evidence.ToCBOR()
 	require.NoError(t, err)
@@ -280,7 +336,8 @@ func TestProtectedHeadersX5ChainArrayRoundTrip(t *testing.T) {
 	var decoded Evidence
 	require.NoError(t, decoded.FromCBOR(encoded))
 
-	assert.Equal(t, [][]byte{{0x01}, {0x02}}, decoded.ProtectedHeaders.GetX5Chain())
+	assertCertificateEqual(t, evidence.SigningCert, decoded.SigningCert)
+	assertIntermediateCertsEqual(t, evidence.IntermediateCerts, decoded.IntermediateCerts)
 }
 
 func TestEvidenceSignAndVerify(t *testing.T) {
@@ -339,7 +396,7 @@ func TestEvidenceCBORShape(t *testing.T) {
 	require.Contains(t, protected, uint64(protectedHeaderLabelX5Chain))
 	var x5chain []byte
 	require.NoError(t, decMode.Unmarshal(protected[uint64(protectedHeaderLabelX5Chain)], &x5chain))
-	assert.Equal(t, []byte{0xff}, x5chain)
+	assert.Equal(t, evidence.SigningCert.Raw, x5chain)
 
 	var unprotected map[any]cbor.RawMessage
 	require.NoError(t, decMode.Unmarshal(coseItems[1], &unprotected))

@@ -4,6 +4,7 @@ package ratsdtokenv2
 
 import (
 	"crypto/rand"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"math"
@@ -75,15 +76,11 @@ func mustDecMode() cbor.DecMode {
 // Evidence exposes a RATSD v2 token as the COSE_Sign1 envelope defined in
 // docs/ratsd-token.cddl.
 type Evidence struct {
-	ProtectedHeaders ProtectedHeaders
-	Claims           Claims
-	Collection       cmw.CMW
-	message          cose.Sign1Message
-}
-
-// ProtectedHeaders contains the protected COSE header map.
-type ProtectedHeaders struct {
-	X5Chain [][]byte
+	SigningCert       *x509.Certificate
+	IntermediateCerts []*x509.Certificate
+	Claims            Claims
+	Collection        cmw.CMW
+	message           cose.Sign1Message
 }
 
 // Claims contains the tagged EAT claims embedded in the RATSD CMW collection.
@@ -214,15 +211,46 @@ func (e Evidence) GetSignature() []byte {
 	return bytesOrEmpty(e.message.Signature)
 }
 
-// SetX5Chain stores the x5chain protected header. A single certificate is
-// encoded as bytes, while two or more certificates are encoded as an array.
-func (h *ProtectedHeaders) SetX5Chain(certs ...[]byte) {
-	h.X5Chain = cloneByteSlices(certs)
+// AddSigningCert adds a DER-encoded X.509 certificate to the COSE x5chain
+// protected header as the leaf certificate.
+func (e *Evidence) AddSigningCert(der []byte) error {
+	if e == nil {
+		return errNilEvidence
+	}
+	if len(der) == 0 {
+		return errors.New("nil or empty signing certificate")
+	}
+
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		return fmt.Errorf("invalid signing certificate: %w", err)
+	}
+
+	e.SigningCert = cert
+	return nil
 }
 
-// GetX5Chain returns a copy of the x5chain protected header.
-func (h ProtectedHeaders) GetX5Chain() [][]byte {
-	return cloneByteSlices(h.X5Chain)
+// AddIntermediateCerts adds DER-encoded X.509 certificates to the COSE
+// x5chain protected header after the signing certificate. The supplied DER may
+// contain one or more concatenated certificates.
+func (e *Evidence) AddIntermediateCerts(der []byte) error {
+	if e == nil {
+		return errNilEvidence
+	}
+	if len(der) == 0 {
+		return errors.New("nil or empty intermediate certificates")
+	}
+
+	certs, err := x509.ParseCertificates(der)
+	if err != nil {
+		return fmt.Errorf("invalid intermediate certificates: %w", err)
+	}
+	if len(certs) == 0 {
+		return errors.New("no certificates found in intermediate certificate data")
+	}
+
+	e.IntermediateCerts = certs
+	return nil
 }
 
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
@@ -314,7 +342,7 @@ func (e *Evidence) Valid() error {
 		return errNilEvidence
 	}
 
-	if err := e.ProtectedHeaders.Valid(); err != nil {
+	if err := e.validateCertificates(); err != nil {
 		return err
 	}
 
@@ -324,25 +352,6 @@ func (e *Evidence) Valid() error {
 
 	if err := validateUserCollection(e.Collection); err != nil {
 		return err
-	}
-
-	return nil
-}
-
-// Valid checks whether the protected headers match the RATSD v2 token shape.
-func (h ProtectedHeaders) Valid() error {
-	if len(h.X5Chain) == 0 {
-		return nil
-	}
-
-	if len(h.X5Chain) == 1 {
-		return nil
-	}
-
-	for i, cert := range h.X5Chain {
-		if cert == nil {
-			return fmt.Errorf(`invalid protected header "x5chain": nil certificate at index %d`, i)
-		}
 	}
 
 	return nil
@@ -498,7 +507,7 @@ func (e *Evidence) UnmarshalCBOR(data []byte) error {
 		return fmt.Errorf("CBOR decoding failed: unprotected headers MUST be empty")
 	}
 
-	protectedHeaders, err := protectedHeadersFromCOSE(msg.Headers.Protected)
+	signingCert, intermediateCerts, err := certificatesFromProtectedHeaders(msg.Headers.Protected)
 	if err != nil {
 		return fmt.Errorf("CBOR decoding failed: %w", err)
 	}
@@ -509,10 +518,11 @@ func (e *Evidence) UnmarshalCBOR(data []byte) error {
 	}
 
 	tmp := Evidence{
-		ProtectedHeaders: protectedHeaders,
-		Claims:           claims,
-		Collection:       collection,
-		message:          cloneSign1Message(msg),
+		SigningCert:       signingCert,
+		IntermediateCerts: intermediateCerts,
+		Claims:            claims,
+		Collection:        collection,
+		message:           cloneSign1Message(msg),
 	}
 
 	if err := tmp.Valid(); err != nil {
@@ -520,36 +530,6 @@ func (e *Evidence) UnmarshalCBOR(data []byte) error {
 	}
 
 	*e = tmp
-	return nil
-}
-
-// MarshalCBOR encodes the protected header map.
-func (h ProtectedHeaders) MarshalCBOR() ([]byte, error) {
-	protected, err := h.toCOSEProtectedHeader()
-	if err != nil {
-		return nil, err
-	}
-
-	return protected.MarshalCBOR()
-}
-
-// UnmarshalCBOR decodes the protected header map.
-func (h *ProtectedHeaders) UnmarshalCBOR(data []byte) error {
-	if h == nil {
-		return errors.New("nil protected headers")
-	}
-
-	var protected cose.ProtectedHeader
-	if err := protected.UnmarshalCBOR(data); err != nil {
-		return fmt.Errorf("invalid protected headers: %w", err)
-	}
-
-	decoded, err := protectedHeadersFromCOSE(protected)
-	if err != nil {
-		return err
-	}
-
-	*h = decoded
 	return nil
 }
 
@@ -664,7 +644,7 @@ func newSign1Message() cose.Sign1Message {
 }
 
 func (e Evidence) sign1Message(payload []byte) (*cose.Sign1Message, error) {
-	headers, err := e.ProtectedHeaders.toCOSEHeaders()
+	headers, err := e.toCOSEHeaders()
 	if err != nil {
 		return nil, err
 	}
@@ -699,8 +679,8 @@ func (e Evidence) sign1Algorithm() (cose.Algorithm, bool, error) {
 	}
 }
 
-func (h ProtectedHeaders) toCOSEHeaders() (cose.Headers, error) {
-	protected, err := h.toCOSEProtectedHeader()
+func (e Evidence) toCOSEHeaders() (cose.Headers, error) {
+	protected, err := e.toCOSEProtectedHeader()
 	if err != nil {
 		return cose.Headers{}, err
 	}
@@ -711,80 +691,175 @@ func (h ProtectedHeaders) toCOSEHeaders() (cose.Headers, error) {
 	}, nil
 }
 
-func (h ProtectedHeaders) toCOSEProtectedHeader() (cose.ProtectedHeader, error) {
-	if err := h.Valid(); err != nil {
+func (e Evidence) toCOSEProtectedHeader() (cose.ProtectedHeader, error) {
+	if err := e.validateCertificates(); err != nil {
 		return nil, err
 	}
 
 	protected := cose.ProtectedHeader{}
-	switch len(h.X5Chain) {
-	case 0:
-	case 1:
-		protected[cose.HeaderLabelX5Chain] = bytesOrEmpty(h.X5Chain[0])
-	default:
-		protected[cose.HeaderLabelX5Chain] = cloneByteSlices(h.X5Chain)
+	x5chain, ok, err := e.x5ChainHeaderValue()
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		protected[cose.HeaderLabelX5Chain] = x5chain
 	}
 
 	return protected, nil
 }
 
-func protectedHeadersFromCOSE(protected cose.ProtectedHeader) (ProtectedHeaders, error) {
-	var decoded ProtectedHeaders
+func certificatesFromProtectedHeaders(protected cose.ProtectedHeader) (*x509.Certificate, []*x509.Certificate, error) {
+	var signingCert *x509.Certificate
+	var intermediateCerts []*x509.Certificate
 
 	for key, value := range protected {
 		label, ok := int64Label(key)
 		if !ok {
-			return ProtectedHeaders{}, fmt.Errorf("invalid protected header label: %v", key)
+			return nil, nil, fmt.Errorf("invalid protected header label: %v", key)
 		}
 
 		switch label {
 		case cose.HeaderLabelAlgorithm:
 			if _, err := protected.Algorithm(); err != nil {
-				return ProtectedHeaders{}, fmt.Errorf(`invalid protected header "alg": %w`, err)
+				return nil, nil, fmt.Errorf(`invalid protected header "alg": %w`, err)
 			}
 		case cose.HeaderLabelX5Chain:
-			x5chain, err := x5ChainFromHeaderValue(value)
+			cert, certs, err := x5ChainFromHeaderValue(value)
 			if err != nil {
-				return ProtectedHeaders{}, err
+				return nil, nil, err
 			}
-			decoded.X5Chain = x5chain
+			signingCert = cert
+			intermediateCerts = certs
 		default:
-			return ProtectedHeaders{}, fmt.Errorf("invalid protected header label: %d", label)
+			return nil, nil, fmt.Errorf("invalid protected header label: %d", label)
 		}
 	}
 
-	if err := decoded.Valid(); err != nil {
-		return ProtectedHeaders{}, err
-	}
-
-	return decoded, nil
+	return signingCert, intermediateCerts, nil
 }
 
-func x5ChainFromHeaderValue(value any) ([][]byte, error) {
+func (e Evidence) validateCertificates() error {
+	if e.SigningCert == nil {
+		if len(e.IntermediateCerts) != 0 {
+			return errors.New("intermediate certificates supplied but no signing certificate")
+		}
+		return nil
+	}
+
+	if _, err := certificateRaw(e.SigningCert, "signing certificate"); err != nil {
+		return err
+	}
+
+	for i, cert := range e.IntermediateCerts {
+		if _, err := certificateRaw(cert, fmt.Sprintf("intermediate certificate at index %d", i)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (e Evidence) x5ChainHeaderValue() (any, bool, error) {
+	if e.SigningCert == nil {
+		if len(e.IntermediateCerts) != 0 {
+			return nil, false, errors.New("intermediate certificates supplied but no signing certificate")
+		}
+		return nil, false, nil
+	}
+
+	signingCertRaw, err := certificateRaw(e.SigningCert, "signing certificate")
+	if err != nil {
+		return nil, false, err
+	}
+
+	if len(e.IntermediateCerts) == 0 {
+		return signingCertRaw, true, nil
+	}
+
+	certChain := make([][]byte, 0, 1+len(e.IntermediateCerts))
+	certChain = append(certChain, signingCertRaw)
+	for i, cert := range e.IntermediateCerts {
+		certRaw, err := certificateRaw(cert, fmt.Sprintf("intermediate certificate at index %d", i))
+		if err != nil {
+			return nil, false, err
+		}
+		certChain = append(certChain, certRaw)
+	}
+
+	return certChain, true, nil
+}
+
+func certificateRaw(cert *x509.Certificate, description string) ([]byte, error) {
+	if cert == nil {
+		return nil, fmt.Errorf("invalid %s: nil certificate", description)
+	}
+	if len(cert.Raw) == 0 {
+		return nil, fmt.Errorf("invalid %s: empty raw DER", description)
+	}
+
+	return cloneBytes(cert.Raw), nil
+}
+
+func x5ChainFromHeaderValue(value any) (*x509.Certificate, []*x509.Certificate, error) {
 	switch typed := value.(type) {
 	case []byte:
-		return [][]byte{bytesOrEmpty(typed)}, nil
+		cert, err := parseX5ChainCertificate(typed, "signing certificate")
+		if err != nil {
+			return nil, nil, err
+		}
+		return cert, nil, nil
 	case [][]byte:
 		if len(typed) < 2 {
-			return nil, fmt.Errorf(`invalid protected header "x5chain": array form requires at least 2 certificates`)
+			return nil, nil, fmt.Errorf(`invalid protected header "x5chain": array form requires at least 2 certificates`)
 		}
-		return cloneByteSlices(typed), nil
+		return parseX5ChainCertificateList(typed)
 	case []any:
 		if len(typed) < 2 {
-			return nil, fmt.Errorf(`invalid protected header "x5chain": array form requires at least 2 certificates`)
+			return nil, nil, fmt.Errorf(`invalid protected header "x5chain": array form requires at least 2 certificates`)
 		}
 		chain := make([][]byte, len(typed))
 		for i, cert := range typed {
 			certBytes, ok := cert.([]byte)
 			if !ok {
-				return nil, fmt.Errorf(`invalid protected header "x5chain": certificate at index %d has type %T`, i, cert)
+				return nil, nil, fmt.Errorf(`invalid protected header "x5chain": certificate at index %d has type %T`, i, cert)
 			}
-			chain[i] = bytesOrEmpty(certBytes)
+			chain[i] = certBytes
 		}
-		return chain, nil
+		return parseX5ChainCertificateList(chain)
 	default:
-		return nil, fmt.Errorf(`invalid protected header "x5chain": %T`, value)
+		return nil, nil, fmt.Errorf(`invalid protected header "x5chain": %T`, value)
 	}
+}
+
+func parseX5ChainCertificateList(chain [][]byte) (*x509.Certificate, []*x509.Certificate, error) {
+	signingCert, err := parseX5ChainCertificate(chain[0], "signing certificate")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	intermediateCerts := make([]*x509.Certificate, 0, len(chain)-1)
+	for i, der := range chain[1:] {
+		cert, err := parseX5ChainCertificate(der, fmt.Sprintf("intermediate certificate at index %d", i))
+		if err != nil {
+			return nil, nil, err
+		}
+		intermediateCerts = append(intermediateCerts, cert)
+	}
+
+	return signingCert, intermediateCerts, nil
+}
+
+func parseX5ChainCertificate(der []byte, description string) (*x509.Certificate, error) {
+	if len(der) == 0 {
+		return nil, fmt.Errorf(`invalid protected header "x5chain": empty %s`, description)
+	}
+
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		return nil, fmt.Errorf(`invalid protected header "x5chain" %s: %w`, description, err)
+	}
+
+	return cert, nil
 }
 
 func marshalPayload(claims Claims, collection cmw.CMW) ([]byte, error) {
