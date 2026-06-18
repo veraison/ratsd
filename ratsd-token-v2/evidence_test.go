@@ -29,13 +29,12 @@ func validEvidence() *Evidence {
 		panic(err)
 	}
 
-	record := cmw.NewMonad(
+	if err := evidence.SetToken(
+		"configfs-tsm",
 		"application/vnd.veraison.tsm-report+cbor",
 		[]byte{0xa1, 0x67, 0x6f, 0x75, 0x74, 0x62, 0x6c, 0x6f, 0x62, 0x41, 0xff},
 		cmw.Evidence,
-	)
-
-	if err := evidence.Collection.AddCollectionItem("configfs-tsm", record); err != nil {
+	); err != nil {
 		panic(err)
 	}
 
@@ -163,6 +162,37 @@ func TestEvidenceSetCollectionCopiesCMWCollection(t *testing.T) {
 	assert.Equal(t, "application/octet-stream", record.GetMonadType())
 	assert.Equal(t, []byte{0x01, 0x02}, record.GetMonadValue())
 	assert.Equal(t, cmw.Indicator(cmw.Evidence), record.GetMonadIndicator())
+}
+
+func TestEvidenceSetTokenStoresCMWMonad(t *testing.T) {
+	evidence := NewEvidence()
+	token := []byte{0x01, 0x02}
+
+	require.NoError(t, evidence.SetToken("mock-tsm", "application/octet-stream", token, cmw.Evidence))
+	token[0] = 0xff
+
+	record, err := evidence.Collection.GetCollectionItem("mock-tsm")
+	require.NoError(t, err)
+	assert.Equal(t, "application/octet-stream", record.GetMonadType())
+	assert.Equal(t, []byte{0x01, 0x02}, record.GetMonadValue())
+	assert.Equal(t, cmw.Indicator(cmw.Evidence), record.GetMonadIndicator())
+}
+
+func TestEvidenceSetTokenFail(t *testing.T) {
+	evidence := NewEvidence()
+
+	assert.EqualError(t,
+		evidence.SetToken("__ratsd", "application/octet-stream", []byte{0x01}),
+		`validation failed: invalid CMW collection key "__ratsd": reserved`,
+	)
+	assert.EqualError(t,
+		evidence.SetToken("mock-tsm", "", []byte{0x01}),
+		`validation failed: invalid CMW record at key "mock-tsm": missing mandatory CMW record type`,
+	)
+	assert.EqualError(t,
+		evidence.SetToken("mock-tsm", "application/octet-stream", nil),
+		`validation failed: invalid CMW record at key "mock-tsm": missing mandatory CMW record value`,
+	)
 }
 
 func TestEvidenceSetCollectionFailReservedKey(t *testing.T) {

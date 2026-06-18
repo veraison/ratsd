@@ -136,8 +136,11 @@ func (e Evidence) GetClaims() (Claims, error) {
 }
 
 // SetCollection attaches the supplied CMW collection to the Evidence instance.
-// The collection must contain only caller-supplied CMW records; the reserved
-// "__ratsd" claims record is injected during token serialization.
+// Most callers should use SetToken to add token bytes and media types directly.
+// This method is intended for callers that already have a complete CMW
+// collection, for example after decoding an existing token. The collection must
+// contain only caller-supplied CMW records; the reserved "__ratsd" claims record
+// is injected during token serialization.
 func (e *Evidence) SetCollection(c cmw.CMW) error {
 	if e == nil {
 		return errNilEvidence
@@ -168,6 +171,33 @@ func (e Evidence) GetCollection() (cmw.CMW, error) {
 	}
 
 	return clone, nil
+}
+
+// SetToken stores caller-supplied token bytes as a CMW monad in the Evidence
+// collection.
+func (e *Evidence) SetToken(key string, mediaType string, token []byte, indicators ...cmw.Indicator) error {
+	if e == nil {
+		return errNilEvidence
+	}
+
+	if err := validateCollectionForToken(e.Collection); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	if err := validateCollectionKey(key); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	record := cmw.NewMonad(mediaType, cloneBytes(token), indicators...)
+	if err := validateCMWRecord(key, *record); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	if err := e.Collection.AddCollectionItem(key, record); err != nil {
+		return fmt.Errorf("adding CMW record at key %q: %w", key, err)
+	}
+
+	return nil
 }
 
 // SetSignature stores the COSE_Sign1 signature bytes.
@@ -891,6 +921,22 @@ func validateCollectionKey(key string) error {
 }
 
 func validateUserCollection(collection cmw.CMW) error {
+	if err := validateCollectionForToken(collection); err != nil {
+		return err
+	}
+
+	meta, err := collection.GetCollectionMeta()
+	if err != nil {
+		return err
+	}
+	if len(meta) == 0 {
+		return errMissingCollectionRecord
+	}
+
+	return nil
+}
+
+func validateCollectionForToken(collection cmw.CMW) error {
 	if collection.GetKind() != cmw.KindCollection {
 		return fmt.Errorf("want CMW collection, got %s", collection.GetKind())
 	}
@@ -906,9 +952,6 @@ func validateUserCollection(collection cmw.CMW) error {
 	meta, err := collection.GetCollectionMeta()
 	if err != nil {
 		return err
-	}
-	if len(meta) == 0 {
-		return errMissingCollectionRecord
 	}
 
 	for _, itemMeta := range meta {
