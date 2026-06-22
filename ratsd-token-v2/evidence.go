@@ -33,15 +33,17 @@ var (
 
 	errNilEvidence                = errors.New("nil evidence")
 	errNilClaims                  = errors.New("nil claims")
-	errEmptyVendor                = errors.New(`invalid claim "vendor": empty value`)
-	errEmptyModel                 = errors.New(`invalid claim "model": empty value`)
+	errEmptyOEMID                 = errors.New(`invalid claim "oemid": zero value`)
+	errEmptySWName                = errors.New(`invalid claim "swname": empty value`)
+	errEmptySWVersion             = errors.New(`invalid claim "swversion": empty value`)
 	errEmptyNonceAdjustFunction   = errors.New(`invalid claim "nonce_adjust_function": empty value`)
 	errEmptyNonceAdjustMapKey     = errors.New(`invalid claim "nonce_adjust_map": empty key`)
 	errEmptyCollectionKey         = errors.New("invalid CMW collection key: empty value")
 	errMissingEatProfile          = errors.New(`missing mandatory claim "eat_profile"`)
 	errMissingEatNonce            = errors.New(`missing mandatory claim "eat_nonce"`)
-	errMissingVendor              = errors.New(`missing mandatory claim "vendor"`)
-	errMissingModel               = errors.New(`missing mandatory claim "model"`)
+	errMissingOEMID               = errors.New(`missing mandatory claim "oemid"`)
+	errMissingSWName              = errors.New(`missing mandatory claim "swname"`)
+	errMissingSWVersion           = errors.New(`missing mandatory claim "swversion"`)
 	errMissingNonceAdjustFunction = errors.New(`missing mandatory claim "nonce_adjust_function"`)
 	errMissingCMWRecordValue      = errors.New("missing mandatory CMW record value")
 	errMissingCollectionRecord    = errors.New("missing mandatory CMW collection record")
@@ -87,8 +89,9 @@ func NewEvidence() *Evidence {
 	return &Evidence{
 		Claims: Claims{
 			EatProfile: Profile,
-			Vendor:     DefaultLeadAttesterVendor,
-			Model:      DefaultLeadAttesterModel,
+			OEMID:      DefaultLeadAttesterOEMID,
+			SWName:     DefaultLeadAttesterSWName,
+			SWVersion:  DefaultLeadAttesterSWVersion,
 		},
 		Collection: *collection,
 		message:    newSign1Message(),

@@ -13,25 +13,28 @@ const (
 	NonceAdjustFunctionShake128 = "shake-128"
 	NonceAdjustFunctionShake256 = "shake-256"
 
-	DefaultLeadAttesterVendor = "Veraison"
-	DefaultLeadAttesterModel  = "ratsd.1.0.0"
+	DefaultLeadAttesterOEMID     = uint64(48482)
+	DefaultLeadAttesterSWName    = "ratsd"
+	DefaultLeadAttesterSWVersion = "1.0.0"
 
 	claimsTagNumber = 601
 
 	claimLabelEatProfile          = 265
 	claimLabelEatNonce            = 10
+	claimLabelOEMID               = 258
+	claimLabelSWName              = 270
+	claimLabelSWVersion           = 271
 	claimLabelNonceAdjustFunction = -65537
 	claimLabelNonceAdjustMap      = -65538
-	claimLabelVendor              = -65539
-	claimLabelModel               = -65540
 )
 
 // Claims contains the tagged EAT claims embedded in the RATSD CMW collection.
 type Claims struct {
 	EatProfile          string
 	EatNonce            []byte
-	Vendor              string
-	Model               string
+	OEMID               uint64
+	SWName              string
+	SWVersion           string
 	NonceAdjustFunction *string
 	NonceAdjustMap      map[string]uint
 }
@@ -60,42 +63,61 @@ func (c Claims) GetEatProfile() string {
 	return c.EatProfile
 }
 
-// SetVendor sets the Lead Attester vendor claim.
-func (c *Claims) SetVendor(vendor string) error {
+// SetOEMID sets the EAT oemid claim using its PEN form.
+func (c *Claims) SetOEMID(oemID uint64) error {
 	if c == nil {
 		return errNilClaims
 	}
 
-	if vendor == "" {
-		return errEmptyVendor
+	if oemID == 0 {
+		return errEmptyOEMID
 	}
 
-	c.Vendor = vendor
+	c.OEMID = oemID
 	return nil
 }
 
-// GetVendor returns the Lead Attester vendor claim.
-func (c Claims) GetVendor() string {
-	return c.Vendor
+// GetOEMID returns the EAT oemid claim in its PEN form.
+func (c Claims) GetOEMID() uint64 {
+	return c.OEMID
 }
 
-// SetModel sets the Lead Attester model claim.
-func (c *Claims) SetModel(model string) error {
+// SetSWName sets the EAT swname claim.
+func (c *Claims) SetSWName(swName string) error {
 	if c == nil {
 		return errNilClaims
 	}
 
-	if model == "" {
-		return errEmptyModel
+	if swName == "" {
+		return errEmptySWName
 	}
 
-	c.Model = model
+	c.SWName = swName
 	return nil
 }
 
-// GetModel returns the Lead Attester model claim.
-func (c Claims) GetModel() string {
-	return c.Model
+// GetSWName returns the EAT swname claim.
+func (c Claims) GetSWName() string {
+	return c.SWName
+}
+
+// SetSWVersion sets the EAT swversion claim.
+func (c *Claims) SetSWVersion(swVersion string) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if swVersion == "" {
+		return errEmptySWVersion
+	}
+
+	c.SWVersion = swVersion
+	return nil
+}
+
+// GetSWVersion returns the EAT swversion claim.
+func (c Claims) GetSWVersion() string {
+	return c.SWVersion
 }
 
 // SetNonceAdjustFn sets the nonce adjustment algorithm.
@@ -175,12 +197,16 @@ func (c Claims) Valid() error {
 		return fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
 	}
 
-	if c.Vendor == "" {
-		return errMissingVendor
+	if c.OEMID == 0 {
+		return errMissingOEMID
 	}
 
-	if c.Model == "" {
-		return errMissingModel
+	if c.SWName == "" {
+		return errMissingSWName
+	}
+
+	if c.SWVersion == "" {
+		return errMissingSWVersion
 	}
 
 	if c.NonceAdjustFunction != nil {
@@ -218,8 +244,9 @@ func (c Claims) MarshalCBOR() ([]byte, error) {
 	claims := map[int64]any{
 		claimLabelEatProfile: c.EatProfile,
 		claimLabelEatNonce:   bytesOrEmpty(c.EatNonce),
-		claimLabelVendor:     c.Vendor,
-		claimLabelModel:      c.Model,
+		claimLabelOEMID:      c.OEMID,
+		claimLabelSWName:     c.SWName,
+		claimLabelSWVersion:  []string{c.SWVersion},
 	}
 
 	if c.NonceAdjustFunction != nil {
@@ -284,14 +311,23 @@ func (c *Claims) UnmarshalCBOR(data []byte) error {
 				return fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
 			}
 			decoded.EatNonce = bytesOrEmpty(decoded.EatNonce)
-		case claimLabelVendor:
-			if err := decMode.Unmarshal(value, &decoded.Vendor); err != nil {
-				return fmt.Errorf(`invalid claim "vendor": %w`, err)
+		case claimLabelOEMID:
+			if err := decMode.Unmarshal(value, &decoded.OEMID); err != nil {
+				return fmt.Errorf(`invalid claim "oemid": %w`, err)
 			}
-		case claimLabelModel:
-			if err := decMode.Unmarshal(value, &decoded.Model); err != nil {
-				return fmt.Errorf(`invalid claim "model": %w`, err)
+		case claimLabelSWName:
+			if err := decMode.Unmarshal(value, &decoded.SWName); err != nil {
+				return fmt.Errorf(`invalid claim "swname": %w`, err)
 			}
+		case claimLabelSWVersion:
+			var swVersion []string
+			if err := decMode.Unmarshal(value, &swVersion); err != nil {
+				return fmt.Errorf(`invalid claim "swversion": %w`, err)
+			}
+			if len(swVersion) != 1 {
+				return fmt.Errorf(`invalid claim "swversion": expected one-element array`)
+			}
+			decoded.SWVersion = swVersion[0]
 		case claimLabelNonceAdjustFunction:
 			var alg string
 			if err := decMode.Unmarshal(value, &alg); err != nil {
@@ -333,8 +369,9 @@ func cloneClaims(c Claims) Claims {
 	clone := Claims{
 		EatProfile: c.EatProfile,
 		EatNonce:   cloneBytes(c.EatNonce),
-		Vendor:     c.Vendor,
-		Model:      c.Model,
+		OEMID:      c.OEMID,
+		SWName:     c.SWName,
+		SWVersion:  c.SWVersion,
 	}
 
 	if c.NonceAdjustFunction != nil {
