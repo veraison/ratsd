@@ -156,7 +156,7 @@ func (c Claims) Valid() error {
 	return nil
 }
 
-// MarshalCBOR encodes the tagged RATSD claims.
+// MarshalCBOR encodes the tagged Lead Attester claims, inside RATSD
 func (c Claims) MarshalCBOR() ([]byte, error) {
 	if err := c.Valid(); err != nil {
 		return nil, err
