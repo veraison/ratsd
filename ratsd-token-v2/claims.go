@@ -13,18 +13,25 @@ const (
 	NonceAdjustFunctionShake128 = "shake-128"
 	NonceAdjustFunctionShake256 = "shake-256"
 
+	DefaultLeadAttesterVendor = "Veraison"
+	DefaultLeadAttesterModel  = "ratsd.1.0.0"
+
 	claimsTagNumber = 601
 
 	claimLabelEatProfile          = 265
 	claimLabelEatNonce            = 10
 	claimLabelNonceAdjustFunction = -65537
 	claimLabelNonceAdjustMap      = -65538
+	claimLabelVendor              = -65539
+	claimLabelModel               = -65540
 )
 
 // Claims contains the tagged EAT claims embedded in the RATSD CMW collection.
 type Claims struct {
 	EatProfile          string
 	EatNonce            []byte
+	Vendor              string
+	Model               string
 	NonceAdjustFunction *string
 	NonceAdjustMap      map[string]uint
 }
@@ -51,6 +58,44 @@ func (c Claims) GetEatNonce() []byte {
 // GetEatProfile returns the EAT profile claim.
 func (c Claims) GetEatProfile() string {
 	return c.EatProfile
+}
+
+// SetVendor sets the Lead Attester vendor claim.
+func (c *Claims) SetVendor(vendor string) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if vendor == "" {
+		return errEmptyVendor
+	}
+
+	c.Vendor = vendor
+	return nil
+}
+
+// GetVendor returns the Lead Attester vendor claim.
+func (c Claims) GetVendor() string {
+	return c.Vendor
+}
+
+// SetModel sets the Lead Attester model claim.
+func (c *Claims) SetModel(model string) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if model == "" {
+		return errEmptyModel
+	}
+
+	c.Model = model
+	return nil
+}
+
+// GetModel returns the Lead Attester model claim.
+func (c Claims) GetModel() string {
+	return c.Model
 }
 
 // SetNonceAdjustFn sets the nonce adjustment algorithm.
@@ -130,6 +175,14 @@ func (c Claims) Valid() error {
 		return fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
 	}
 
+	if c.Vendor == "" {
+		return errMissingVendor
+	}
+
+	if c.Model == "" {
+		return errMissingModel
+	}
+
 	if c.NonceAdjustFunction != nil {
 		if *c.NonceAdjustFunction == "" {
 			return errEmptyNonceAdjustFunction
@@ -165,6 +218,8 @@ func (c Claims) MarshalCBOR() ([]byte, error) {
 	claims := map[int64]any{
 		claimLabelEatProfile: c.EatProfile,
 		claimLabelEatNonce:   bytesOrEmpty(c.EatNonce),
+		claimLabelVendor:     c.Vendor,
+		claimLabelModel:      c.Model,
 	}
 
 	if c.NonceAdjustFunction != nil {
@@ -229,6 +284,14 @@ func (c *Claims) UnmarshalCBOR(data []byte) error {
 				return fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
 			}
 			decoded.EatNonce = bytesOrEmpty(decoded.EatNonce)
+		case claimLabelVendor:
+			if err := decMode.Unmarshal(value, &decoded.Vendor); err != nil {
+				return fmt.Errorf(`invalid claim "vendor": %w`, err)
+			}
+		case claimLabelModel:
+			if err := decMode.Unmarshal(value, &decoded.Model); err != nil {
+				return fmt.Errorf(`invalid claim "model": %w`, err)
+			}
 		case claimLabelNonceAdjustFunction:
 			var alg string
 			if err := decMode.Unmarshal(value, &alg); err != nil {
@@ -270,6 +333,8 @@ func cloneClaims(c Claims) Claims {
 	clone := Claims{
 		EatProfile: c.EatProfile,
 		EatNonce:   cloneBytes(c.EatNonce),
+		Vendor:     c.Vendor,
+		Model:      c.Model,
 	}
 
 	if c.NonceAdjustFunction != nil {

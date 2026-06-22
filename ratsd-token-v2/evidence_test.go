@@ -57,6 +57,8 @@ func assertEvidenceEquivalent(t *testing.T, expected, actual *Evidence) {
 	assertIntermediateCertsEqual(t, expected.IntermediateCerts, actual.IntermediateCerts)
 	assert.Equal(t, expected.Claims.GetEatProfile(), actual.Claims.GetEatProfile())
 	assert.Equal(t, expected.Claims.GetEatNonce(), actual.Claims.GetEatNonce())
+	assert.Equal(t, expected.Claims.GetVendor(), actual.Claims.GetVendor())
+	assert.Equal(t, expected.Claims.GetModel(), actual.Claims.GetModel())
 	assert.Equal(t, expected.Claims.GetNonceAdjustFn(), actual.Claims.GetNonceAdjustFn())
 	assert.Equal(t, expected.Claims.GetNonceAdjustMap(), actual.Claims.GetNonceAdjustMap())
 	assert.Equal(t, mustMarshalCMW(t, expected.Collection), mustMarshalCMW(t, actual.Collection))
@@ -138,6 +140,8 @@ func TestNewEvidence(t *testing.T) {
 	evidence := NewEvidence()
 
 	assert.Equal(t, Profile, evidence.Claims.GetEatProfile())
+	assert.Equal(t, DefaultLeadAttesterVendor, evidence.Claims.GetVendor())
+	assert.Equal(t, DefaultLeadAttesterModel, evidence.Claims.GetModel())
 	assert.Nil(t, evidence.SigningCert)
 	assert.Empty(t, evidence.IntermediateCerts)
 	meta, err := evidence.Collection.GetCollectionMeta()
@@ -158,6 +162,34 @@ func TestClaimsSetNonceFail(t *testing.T) {
 
 	assert.EqualError(t, claims.SetNonce([]byte("short")), "a nonce must be between 8 and 64 bytes long; found 5")
 	assert.Nil(t, claims.EatNonce)
+}
+
+func TestClaimsSetVendor(t *testing.T) {
+	var claims Claims
+
+	assert.NoError(t, claims.SetVendor("Oracle"))
+	assert.Equal(t, "Oracle", claims.GetVendor())
+}
+
+func TestClaimsSetVendorFail(t *testing.T) {
+	var claims Claims
+
+	assert.EqualError(t, claims.SetVendor(""), `invalid claim "vendor": empty value`)
+	assert.Empty(t, claims.Vendor)
+}
+
+func TestClaimsSetModel(t *testing.T) {
+	var claims Claims
+
+	assert.NoError(t, claims.SetModel("ratsd.1.0.0"))
+	assert.Equal(t, "ratsd.1.0.0", claims.GetModel())
+}
+
+func TestClaimsSetModelFail(t *testing.T) {
+	var claims Claims
+
+	assert.EqualError(t, claims.SetModel(""), `invalid claim "model": empty value`)
+	assert.Empty(t, claims.Model)
 }
 
 func TestClaimsSetNonceAdjustFn(t *testing.T) {
@@ -309,6 +341,20 @@ func TestEvidenceValidFailWrongProfile(t *testing.T) {
 	assert.EqualError(t, evidence.Valid(), `invalid claim "eat_profile": expected "tag:github.com,2026:veraison/ratsd/v2"`)
 }
 
+func TestEvidenceValidFailMissingVendor(t *testing.T) {
+	evidence := validEvidence()
+	evidence.Claims.Vendor = ""
+
+	assert.EqualError(t, evidence.Valid(), `missing mandatory claim "vendor"`)
+}
+
+func TestEvidenceValidFailMissingModel(t *testing.T) {
+	evidence := validEvidence()
+	evidence.Claims.Model = ""
+
+	assert.EqualError(t, evidence.Valid(), `missing mandatory claim "model"`)
+}
+
 func TestEvidenceValidFailNonceAdjustMapWithoutFunction(t *testing.T) {
 	evidence := validEvidence()
 	evidence.Claims.NonceAdjustFunction = nil
@@ -431,6 +477,8 @@ func TestEvidenceCBORShape(t *testing.T) {
 	require.Contains(t, claims, uint64(claimLabelEatNonce))
 	require.Contains(t, claims, int64(claimLabelNonceAdjustFunction))
 	require.Contains(t, claims, int64(claimLabelNonceAdjustMap))
+	require.Contains(t, claims, int64(claimLabelVendor))
+	require.Contains(t, claims, int64(claimLabelModel))
 
 	var profile string
 	require.NoError(t, decMode.Unmarshal(claims[uint64(claimLabelEatProfile)], &profile))
@@ -439,6 +487,14 @@ func TestEvidenceCBORShape(t *testing.T) {
 	var nonce []byte
 	require.NoError(t, decMode.Unmarshal(claims[uint64(claimLabelEatNonce)], &nonce))
 	assert.Equal(t, []byte("12345678"), nonce)
+
+	var vendor string
+	require.NoError(t, decMode.Unmarshal(claims[int64(claimLabelVendor)], &vendor))
+	assert.Equal(t, DefaultLeadAttesterVendor, vendor)
+
+	var model string
+	require.NoError(t, decMode.Unmarshal(claims[int64(claimLabelModel)], &model))
+	assert.Equal(t, DefaultLeadAttesterModel, model)
 
 	var tsmRecord cmw.CMW
 	require.NoError(t, tsmRecord.UnmarshalCBOR(payload["configfs-tsm"]))

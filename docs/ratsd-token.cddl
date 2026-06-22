@@ -42,6 +42,8 @@ ratsd-token = #6.18([
 ratsd-claims = #6.601({
   &(eat_profile: 265) => RATSD-CLAIMS-PROFILE
   &(eat_nonce: 10) => bytes .size (8..64)
+  &(vendor: -65539) => text
+  &(model: -65540) => text
   ? (
     &(nonce_adjust_function: -65537) => nonce_adjust_function_type
     &(nonce_adjust_map: -65538) => {

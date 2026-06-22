@@ -33,11 +33,15 @@ var (
 
 	errNilEvidence                = errors.New("nil evidence")
 	errNilClaims                  = errors.New("nil claims")
+	errEmptyVendor                = errors.New(`invalid claim "vendor": empty value`)
+	errEmptyModel                 = errors.New(`invalid claim "model": empty value`)
 	errEmptyNonceAdjustFunction   = errors.New(`invalid claim "nonce_adjust_function": empty value`)
 	errEmptyNonceAdjustMapKey     = errors.New(`invalid claim "nonce_adjust_map": empty key`)
 	errEmptyCollectionKey         = errors.New("invalid CMW collection key: empty value")
 	errMissingEatProfile          = errors.New(`missing mandatory claim "eat_profile"`)
 	errMissingEatNonce            = errors.New(`missing mandatory claim "eat_nonce"`)
+	errMissingVendor              = errors.New(`missing mandatory claim "vendor"`)
+	errMissingModel               = errors.New(`missing mandatory claim "model"`)
 	errMissingNonceAdjustFunction = errors.New(`missing mandatory claim "nonce_adjust_function"`)
 	errMissingCMWRecordValue      = errors.New("missing mandatory CMW record value")
 	errMissingCollectionRecord    = errors.New("missing mandatory CMW collection record")
@@ -83,6 +87,8 @@ func NewEvidence() *Evidence {
 	return &Evidence{
 		Claims: Claims{
 			EatProfile: Profile,
+			Vendor:     DefaultLeadAttesterVendor,
+			Model:      DefaultLeadAttesterModel,
 		},
 		Collection: *collection,
 		message:    newSign1Message(),

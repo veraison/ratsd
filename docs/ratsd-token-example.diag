@@ -11,7 +11,9 @@
         << 
           601({
             / eat_profile / 265: "tag:github.com,2026:veraison/ratsd/v2",
-            / eat_nonce /   10: h'375FB85D414BF45F43DE0412EA15697D2E9473'
+            / eat_nonce /   10: h'375FB85D414BF45F43DE0412EA15697D2E9473',
+            / vendor / -65539: "Veraison",
+            / model / -65540: "ratsd.1.0.0",
             / nonce_adjust_function / -65537: "shake-256",
             / nonce_adjust_map / -65538: {
               "configfs-tsm": 32  / meaning that, for the configfs-tsm   /
