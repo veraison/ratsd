@@ -535,6 +535,51 @@ func TestEvidenceCBORShape(t *testing.T) {
 	assert.Equal(t, []byte{0xee}, signature)
 }
 
+func TestClaimsCBORRequiresClaimsTag(t *testing.T) {
+	raw, err := validEvidence().Claims.toClaimsCBOR()
+	require.NoError(t, err)
+
+	untagged, err := encMode.Marshal(raw)
+	require.NoError(t, err)
+
+	var decoded Claims
+	assert.Error(t, decoded.UnmarshalCBOR(untagged))
+
+	wrongTag, err := cbor.RawTag{
+		Number:  claimsTagNumber + 1,
+		Content: untagged,
+	}.MarshalCBOR()
+	require.NoError(t, err)
+
+	assert.Error(t, decoded.UnmarshalCBOR(wrongTag))
+}
+
+func TestClaimsCBORRejectsUnknownLabel(t *testing.T) {
+	raw, err := validEvidence().Claims.toClaimsCBOR()
+	require.NoError(t, err)
+
+	content, err := encMode.Marshal(map[any]any{
+		uint64(claimLabelEatProfile):          raw.EatProfile,
+		uint64(claimLabelEatNonce):            raw.EatNonce,
+		uint64(claimLabelOEMID):               raw.OEMID,
+		uint64(claimLabelSWName):              raw.SWName,
+		uint64(claimLabelSWVersion):           raw.SWVersion,
+		int64(claimLabelNonceAdjustFunction):  raw.NonceAdjustFunction,
+		int64(claimLabelNonceAdjustMap):       raw.NonceAdjustMap,
+		int64(claimLabelNonceAdjustMap - 100): "unknown",
+	})
+	require.NoError(t, err)
+
+	tagged, err := cbor.RawTag{
+		Number:  claimsTagNumber,
+		Content: content,
+	}.MarshalCBOR()
+	require.NoError(t, err)
+
+	var decoded Claims
+	assert.ErrorContains(t, decoded.UnmarshalCBOR(tagged), "unknown field")
+}
+
 func TestEvidenceCBORSerDesPass(t *testing.T) {
 	evidence := validEvidence()
 

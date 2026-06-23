@@ -4,6 +4,7 @@ package ratsdtokenv2
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/eat"
@@ -48,6 +49,11 @@ type claimsCBOR struct {
 	NonceAdjustFunction *string          `cbor:"-65537,keyasint,omitempty"`
 	NonceAdjustMap      *map[string]uint `cbor:"-65538,keyasint,omitempty"`
 }
+
+var (
+	claimsEncMode = mustClaimsEncMode()
+	claimsDecMode = mustClaimsDecMode()
+)
 
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
 func (c *Claims) SetNonce(v []byte) error {
@@ -260,15 +266,7 @@ func (c Claims) MarshalCBOR() ([]byte, error) {
 		return nil, err
 	}
 
-	content, err := encMode.Marshal(claims)
-	if err != nil {
-		return nil, err
-	}
-
-	return cbor.RawTag{
-		Number:  claimsTagNumber,
-		Content: content,
-	}.MarshalCBOR()
+	return claimsEncMode.Marshal(claims)
 }
 
 // UnmarshalCBOR decodes the tagged RATSD claims.
@@ -277,26 +275,12 @@ func (c *Claims) UnmarshalCBOR(data []byte) error {
 		return errNilClaims
 	}
 
-	var tag cbor.RawTag
-	if err := tag.UnmarshalCBOR(data); err != nil {
-		return err
-	}
-
-	if tag.Number != claimsTagNumber {
-		return fmt.Errorf("invalid RATSD claims tag %d", tag.Number)
-	}
-
-	seen, err := validateClaimsCBORLabels(tag.Content)
-	if err != nil {
-		return err
-	}
-
 	var raw claimsCBOR
-	if err := decMode.Unmarshal(tag.Content, &raw); err != nil {
+	if err := claimsDecMode.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	decoded, err := raw.toClaims(seen)
+	decoded, err := raw.toClaims()
 	if err != nil {
 		return err
 	}
@@ -337,31 +321,29 @@ func (c Claims) toClaimsCBOR() (claimsCBOR, error) {
 	return claims, nil
 }
 
-func (c claimsCBOR) toClaims(seen map[int64]bool) (Claims, error) {
+func (c claimsCBOR) toClaims() (Claims, error) {
 	var claims Claims
 
-	if seen[claimLabelEatProfile] {
-		profile, err := c.EatProfile.Get()
-		if err != nil {
-			return Claims{}, fmt.Errorf(`invalid claim "eat_profile": %w`, err)
-		}
+	if profile, err := c.EatProfile.Get(); err == nil {
 		claims.EatProfile = profile
 	}
 
-	if seen[claimLabelEatNonce] {
-		if c.EatNonce.Len() != 1 {
-			return Claims{}, fmt.Errorf(`invalid claim "eat_nonce": expected one nonce`)
-		}
+	switch c.EatNonce.Len() {
+	case 0:
+	case 1:
 		claims.EatNonce = cloneBytes(c.EatNonce.GetI(0))
+	default:
+		return Claims{}, fmt.Errorf(`invalid claim "eat_nonce": expected one nonce`)
 	}
 
 	claims.OEMID = c.OEMID
 	claims.SWName = c.SWName
-	if seen[claimLabelSWVersion] {
-		if len(c.SWVersion) != 1 {
-			return Claims{}, fmt.Errorf(`invalid claim "swversion": expected one-element array`)
-		}
+	switch len(c.SWVersion) {
+	case 0:
+	case 1:
 		claims.SWVersion = c.SWVersion[0]
+	default:
+		return Claims{}, fmt.Errorf(`invalid claim "swversion": expected one-element array`)
 	}
 	if c.NonceAdjustFunction != nil {
 		alg := *c.NonceAdjustFunction
@@ -374,38 +356,38 @@ func (c claimsCBOR) toClaims(seen map[int64]bool) (Claims, error) {
 	return claims, nil
 }
 
-func validateClaimsCBORLabels(content []byte) (map[int64]bool, error) {
-	var raw map[any]cbor.RawMessage
-	if err := decMode.Unmarshal(content, &raw); err != nil {
-		return nil, err
+func newClaimsTagSet() cbor.TagSet {
+	tags := cbor.NewTagSet()
+	if err := tags.Add(
+		cbor.TagOptions{EncTag: cbor.EncTagRequired, DecTag: cbor.DecTagRequired},
+		reflect.TypeOf(claimsCBOR{}),
+		claimsTagNumber,
+	); err != nil {
+		panic(fmt.Sprintf("CBOR claims tag set initialization failed: %v", err))
 	}
 
-	seen := make(map[int64]bool, len(raw))
-	for key := range raw {
-		label, ok := int64Label(key)
-		if !ok {
-			return nil, fmt.Errorf("invalid RATSD claims label: %v", key)
-		}
+	return tags
+}
 
-		if seen[label] {
-			return nil, fmt.Errorf("duplicate RATSD claims label: %d", label)
-		}
-		seen[label] = true
-
-		switch label {
-		case claimLabelEatProfile,
-			claimLabelEatNonce,
-			claimLabelOEMID,
-			claimLabelSWName,
-			claimLabelSWVersion,
-			claimLabelNonceAdjustFunction,
-			claimLabelNonceAdjustMap:
-		default:
-			return nil, fmt.Errorf("invalid RATSD claims label: %d", label)
-		}
+func mustClaimsEncMode() cbor.EncMode {
+	mode, err := cbor.CoreDetEncOptions().EncModeWithTags(newClaimsTagSet())
+	if err != nil {
+		panic(fmt.Sprintf("CBOR claims encoder initialization failed: %v", err))
 	}
 
-	return seen, nil
+	return mode
+}
+
+func mustClaimsDecMode() cbor.DecMode {
+	mode, err := cbor.DecOptions{
+		DupMapKey:         cbor.DupMapKeyEnforcedAPF,
+		ExtraReturnErrors: cbor.ExtraDecErrorUnknownField,
+	}.DecModeWithTags(newClaimsTagSet())
+	if err != nil {
+		panic(fmt.Sprintf("CBOR claims decoder initialization failed: %v", err))
+	}
+
+	return mode
 }
 
 func validateNonce(v []byte) error {
