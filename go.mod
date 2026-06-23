@@ -14,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/veraison/cmw v0.1.2-0.20250109140511-d907dcce0c61
 	github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53
+	github.com/veraison/go-cose v1.3.0
 	github.com/veraison/services v0.0.2501
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.52.0

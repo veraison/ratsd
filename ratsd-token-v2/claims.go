@@ -1,0 +1,437 @@
+// Copyright 2026 Contributors to the Veraison project.
+// SPDX-License-Identifier: Apache-2.0
+package ratsdtokenv2
+
+import (
+	"fmt"
+	"reflect"
+
+	"github.com/fxamacker/cbor/v2"
+	"github.com/veraison/eat"
+)
+
+const (
+	NonceAdjustFunctionShake128 = "shake-128"
+	NonceAdjustFunctionShake256 = "shake-256"
+
+	DefaultLeadAttesterOEMID     = int64(48482)
+	DefaultLeadAttesterSWName    = "ratsd"
+	DefaultLeadAttesterSWVersion = "1.0.0"
+
+	claimsTagNumber = 601
+
+	claimLabelEatProfile          = 265
+	claimLabelEatNonce            = 10
+	claimLabelOEMID               = 258
+	claimLabelSWName              = 270
+	claimLabelSWVersion           = 271
+	claimLabelNonceAdjustFunction = -65537
+	claimLabelNonceAdjustMap      = -65538
+)
+
+// Claims contains the tagged EAT claims embedded in the RATSD CMW collection.
+type Claims struct {
+	EatProfile          string
+	EatNonce            []byte
+	OEMID               int64
+	SWName              string
+	SWVersion           string
+	NonceAdjustFunction *string
+	NonceAdjustMap      map[string]uint
+}
+
+type claimsCBOR struct {
+	EatProfile          eat.Profile      `cbor:"265,keyasint"`
+	EatNonce            eat.Nonce        `cbor:"10,keyasint"`
+	OEMID               int64            `cbor:"258,keyasint"`
+	SWName              string           `cbor:"270,keyasint"`
+	SWVersion           []string         `cbor:"271,keyasint"`
+	NonceAdjustFunction *string          `cbor:"-65537,keyasint,omitempty"`
+	NonceAdjustMap      *map[string]uint `cbor:"-65538,keyasint,omitempty"`
+}
+
+var (
+	claimsEncMode = mustClaimsEncMode()
+	claimsDecMode = mustClaimsDecMode()
+)
+
+// SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
+func (c *Claims) SetNonce(v []byte) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if err := validateNonce(v); err != nil {
+		return err
+	}
+
+	c.EatNonce = cloneBytes(v)
+	return nil
+}
+
+// GetEatNonce returns a copy of the EAT nonce claim.
+func (c Claims) GetEatNonce() []byte {
+	return cloneBytes(c.EatNonce)
+}
+
+// GetEatProfile returns the EAT profile claim.
+func (c Claims) GetEatProfile() string {
+	return c.EatProfile
+}
+
+// SetOEMID sets the EAT oemid claim using its PEN form.
+func (c *Claims) SetOEMID(oemID int64) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if oemID <= 0 {
+		return errEmptyOEMID
+	}
+
+	c.OEMID = oemID
+	return nil
+}
+
+// GetOEMID returns the EAT oemid claim in its PEN form.
+func (c Claims) GetOEMID() int64 {
+	return c.OEMID
+}
+
+// SetSWName sets the EAT swname claim.
+func (c *Claims) SetSWName(swName string) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if swName == "" {
+		return errEmptySWName
+	}
+
+	c.SWName = swName
+	return nil
+}
+
+// GetSWName returns the EAT swname claim.
+func (c Claims) GetSWName() string {
+	return c.SWName
+}
+
+// SetSWVersion sets the EAT swversion claim.
+func (c *Claims) SetSWVersion(swVersion string) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if swVersion == "" {
+		return errEmptySWVersion
+	}
+
+	c.SWVersion = swVersion
+	return nil
+}
+
+// GetSWVersion returns the EAT swversion claim.
+func (c Claims) GetSWVersion() string {
+	return c.SWVersion
+}
+
+// SetNonceAdjustFn sets the nonce adjustment algorithm.
+func (c *Claims) SetNonceAdjustFn(alg string) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	switch alg {
+	case NonceAdjustFunctionShake128, NonceAdjustFunctionShake256:
+		c.NonceAdjustFunction = &alg
+		return nil
+	case "":
+		return errEmptyNonceAdjustFunction
+	default:
+		return fmt.Errorf(`invalid claim "nonce_adjust_function": %q`, alg)
+	}
+}
+
+// GetNonceAdjustFn returns the nonce adjustment algorithm, if set.
+func (c Claims) GetNonceAdjustFn() string {
+	if c.NonceAdjustFunction == nil {
+		return ""
+	}
+
+	return *c.NonceAdjustFunction
+}
+
+// SetKeyandNonceSz sets the nonce-adjusted size for a given key.
+func (c *Claims) SetKeyandNonceSz(key string, sz uint) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	if key == "" {
+		return errEmptyNonceAdjustMapKey
+	}
+
+	if c.NonceAdjustMap == nil {
+		c.NonceAdjustMap = make(map[string]uint)
+	}
+
+	c.NonceAdjustMap[key] = sz
+	return nil
+}
+
+// GetKeyandNonceSz returns the configured adjusted nonce size for the given key.
+func (c Claims) GetKeyandNonceSz(key string) (uint, bool) {
+	if c.NonceAdjustMap == nil {
+		return 0, false
+	}
+
+	sz, ok := c.NonceAdjustMap[key]
+	return sz, ok
+}
+
+// GetNonceAdjustMap returns a copy of the nonce adjustment map.
+func (c Claims) GetNonceAdjustMap() map[string]uint {
+	return cloneNonceAdjustMap(c.NonceAdjustMap)
+}
+
+// Valid checks whether the Claims match the RATSD v2 token shape.
+func (c Claims) Valid() error {
+	if c.EatProfile == "" {
+		return errMissingEatProfile
+	}
+
+	if c.EatProfile != Profile {
+		return fmt.Errorf(`invalid claim "eat_profile": expected %q`, Profile)
+	}
+
+	if c.EatNonce == nil || len(c.EatNonce) == 0 {
+		return errMissingEatNonce
+	}
+
+	if err := validateNonce(c.EatNonce); err != nil {
+		return fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
+	}
+
+	if c.OEMID == 0 {
+		return errMissingOEMID
+	}
+
+	if c.OEMID < 0 {
+		return errEmptyOEMID
+	}
+
+	if c.SWName == "" {
+		return errMissingSWName
+	}
+
+	if c.SWVersion == "" {
+		return errMissingSWVersion
+	}
+
+	if c.NonceAdjustFunction != nil {
+		if *c.NonceAdjustFunction == "" {
+			return errEmptyNonceAdjustFunction
+		}
+
+		if *c.NonceAdjustFunction != NonceAdjustFunctionShake128 &&
+			*c.NonceAdjustFunction != NonceAdjustFunctionShake256 {
+			return fmt.Errorf(`invalid claim "nonce_adjust_function": %q`, *c.NonceAdjustFunction)
+		}
+	}
+
+	if c.NonceAdjustMap != nil {
+		if c.NonceAdjustFunction == nil {
+			return errMissingNonceAdjustFunction
+		}
+
+		for key := range c.NonceAdjustMap {
+			if key == "" {
+				return errEmptyNonceAdjustMapKey
+			}
+		}
+	}
+
+	return nil
+}
+
+// MarshalCBOR encodes the tagged Lead Attester claims, inside RATSD
+func (c Claims) MarshalCBOR() ([]byte, error) {
+	if err := c.Valid(); err != nil {
+		return nil, err
+	}
+
+	claims, err := c.toClaimsCBOR()
+	if err != nil {
+		return nil, err
+	}
+
+	return claimsEncMode.Marshal(claims)
+}
+
+// UnmarshalCBOR decodes the tagged RATSD claims.
+func (c *Claims) UnmarshalCBOR(data []byte) error {
+	if c == nil {
+		return errNilClaims
+	}
+
+	var raw claimsCBOR
+	if err := claimsDecMode.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	decoded, err := raw.toClaims()
+	if err != nil {
+		return err
+	}
+
+	if err := decoded.Valid(); err != nil {
+		return err
+	}
+
+	*c = decoded
+	return nil
+}
+
+func (c Claims) toClaimsCBOR() (claimsCBOR, error) {
+	profile, err := eat.NewProfile(c.EatProfile)
+	if err != nil {
+		return claimsCBOR{}, fmt.Errorf(`invalid claim "eat_profile": %w`, err)
+	}
+
+	var nonce eat.Nonce
+	if err := nonce.Add(bytesOrEmpty(c.EatNonce)); err != nil {
+		return claimsCBOR{}, fmt.Errorf(`invalid claim "eat_nonce": %w`, err)
+	}
+
+	claims := claimsCBOR{
+		EatProfile:          *profile,
+		EatNonce:            nonce,
+		OEMID:               c.OEMID,
+		SWName:              c.SWName,
+		SWVersion:           []string{c.SWVersion},
+		NonceAdjustFunction: c.NonceAdjustFunction,
+	}
+
+	if c.NonceAdjustMap != nil {
+		nonceAdjustMap := cloneNonceAdjustMap(c.NonceAdjustMap)
+		claims.NonceAdjustMap = &nonceAdjustMap
+	}
+
+	return claims, nil
+}
+
+func (c claimsCBOR) toClaims() (Claims, error) {
+	var claims Claims
+
+	if profile, err := c.EatProfile.Get(); err == nil {
+		claims.EatProfile = profile
+	}
+
+	switch c.EatNonce.Len() {
+	case 0:
+	case 1:
+		claims.EatNonce = cloneBytes(c.EatNonce.GetI(0))
+	default:
+		return Claims{}, fmt.Errorf(`invalid claim "eat_nonce": expected one nonce`)
+	}
+
+	claims.OEMID = c.OEMID
+	claims.SWName = c.SWName
+	switch len(c.SWVersion) {
+	case 0:
+	case 1:
+		claims.SWVersion = c.SWVersion[0]
+	default:
+		return Claims{}, fmt.Errorf(`invalid claim "swversion": expected one-element array`)
+	}
+	if c.NonceAdjustFunction != nil {
+		alg := *c.NonceAdjustFunction
+		claims.NonceAdjustFunction = &alg
+	}
+	if c.NonceAdjustMap != nil {
+		claims.NonceAdjustMap = cloneNonceAdjustMap(*c.NonceAdjustMap)
+	}
+
+	return claims, nil
+}
+
+func newClaimsTagSet() cbor.TagSet {
+	tags := cbor.NewTagSet()
+	if err := tags.Add(
+		cbor.TagOptions{EncTag: cbor.EncTagRequired, DecTag: cbor.DecTagRequired},
+		reflect.TypeOf(claimsCBOR{}),
+		claimsTagNumber,
+	); err != nil {
+		panic(fmt.Sprintf("CBOR claims tag set initialization failed: %v", err))
+	}
+
+	return tags
+}
+
+func mustClaimsEncMode() cbor.EncMode {
+	mode, err := cbor.CoreDetEncOptions().EncModeWithTags(newClaimsTagSet())
+	if err != nil {
+		panic(fmt.Sprintf("CBOR claims encoder initialization failed: %v", err))
+	}
+
+	return mode
+}
+
+func mustClaimsDecMode() cbor.DecMode {
+	mode, err := cbor.DecOptions{
+		DupMapKey:         cbor.DupMapKeyEnforcedAPF,
+		ExtraReturnErrors: cbor.ExtraDecErrorUnknownField,
+	}.DecModeWithTags(newClaimsTagSet())
+	if err != nil {
+		panic(fmt.Sprintf("CBOR claims decoder initialization failed: %v", err))
+	}
+
+	return mode
+}
+
+func validateNonce(v []byte) error {
+	nonceSize := len(v)
+	if nonceSize < eat.MinNonceSize || nonceSize > eat.MaxNonceSize {
+		return fmt.Errorf(
+			"a nonce must be between %d and %d bytes long; found %d",
+			eat.MinNonceSize, eat.MaxNonceSize, nonceSize,
+		)
+	}
+
+	return nil
+}
+
+func cloneClaims(c Claims) Claims {
+	clone := Claims{
+		EatProfile: c.EatProfile,
+		EatNonce:   cloneBytes(c.EatNonce),
+		OEMID:      c.OEMID,
+		SWName:     c.SWName,
+		SWVersion:  c.SWVersion,
+	}
+
+	if c.NonceAdjustFunction != nil {
+		nonceAdjustFunction := *c.NonceAdjustFunction
+		clone.NonceAdjustFunction = &nonceAdjustFunction
+	}
+
+	if c.NonceAdjustMap != nil {
+		clone.NonceAdjustMap = cloneNonceAdjustMap(c.NonceAdjustMap)
+	}
+
+	return clone
+}
+
+func cloneNonceAdjustMap(v map[string]uint) map[string]uint {
+	if v == nil {
+		return nil
+	}
+
+	clone := make(map[string]uint, len(v))
+	for k, value := range v {
+		clone[k] = value
+	}
+
+	return clone
+}
