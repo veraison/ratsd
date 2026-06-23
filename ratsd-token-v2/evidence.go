@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/cmw"
 	cose "github.com/veraison/go-cose"
 )
@@ -28,9 +27,6 @@ const (
 )
 
 var (
-	encMode = mustEncMode()
-	decMode = mustDecMode()
-
 	errNilEvidence                = errors.New("nil evidence")
 	errNilClaims                  = errors.New("nil claims")
 	errEmptyOEMID                 = errors.New(`invalid claim "oemid": non-positive value`)
@@ -50,24 +46,6 @@ var (
 	errMissingCollectionType      = errors.New(`missing mandatory CMW collection field "__cmwc_t"`)
 	errMissingRATSDClaimsRecord   = errors.New(`missing mandatory CMW collection field "__ratsd"`)
 )
-
-func mustEncMode() cbor.EncMode {
-	mode, err := cbor.CoreDetEncOptions().EncMode()
-	if err != nil {
-		panic(fmt.Sprintf("CBOR encoder initialization failed: %v", err))
-	}
-
-	return mode
-}
-
-func mustDecMode() cbor.DecMode {
-	mode, err := cbor.DecOptions{}.DecMode()
-	if err != nil {
-		panic(fmt.Sprintf("CBOR decoder initialization failed: %v", err))
-	}
-
-	return mode
-}
 
 // Evidence exposes a RATSD v2 token as the COSE_Sign1 envelope defined in
 // docs/ratsd-token.cddl.
