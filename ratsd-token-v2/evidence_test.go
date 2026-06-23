@@ -170,13 +170,14 @@ func TestClaimsSetOEMID(t *testing.T) {
 	var claims Claims
 
 	assert.NoError(t, claims.SetOEMID(111))
-	assert.Equal(t, uint64(111), claims.GetOEMID())
+	assert.Equal(t, int64(111), claims.GetOEMID())
 }
 
 func TestClaimsSetOEMIDFail(t *testing.T) {
 	var claims Claims
 
-	assert.EqualError(t, claims.SetOEMID(0), `invalid claim "oemid": zero value`)
+	assert.EqualError(t, claims.SetOEMID(0), `invalid claim "oemid": non-positive value`)
+	assert.EqualError(t, claims.SetOEMID(-1), `invalid claim "oemid": non-positive value`)
 	assert.Zero(t, claims.OEMID)
 }
 
@@ -512,7 +513,7 @@ func TestEvidenceCBORShape(t *testing.T) {
 	require.NoError(t, decMode.Unmarshal(claims[uint64(claimLabelEatNonce)], &nonce))
 	assert.Equal(t, []byte("12345678"), nonce)
 
-	var oemID uint64
+	var oemID int64
 	require.NoError(t, decMode.Unmarshal(claims[uint64(claimLabelOEMID)], &oemID))
 	assert.Equal(t, DefaultLeadAttesterOEMID, oemID)
 

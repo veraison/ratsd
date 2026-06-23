@@ -42,7 +42,7 @@ ratsd-token = #6.18([
 ratsd-claims = #6.601({
   &(eat_profile: 265) => RATSD-CLAIMS-PROFILE
   &(eat_nonce: 10) => bytes .size (8..64)
-  &(oemid: 258) => uint
+  &(oemid: 258) => int
   &(swname: 270) => text
   &(swversion: 271) => swversion-type
   ? (

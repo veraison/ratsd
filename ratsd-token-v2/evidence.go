@@ -33,7 +33,7 @@ var (
 
 	errNilEvidence                = errors.New("nil evidence")
 	errNilClaims                  = errors.New("nil claims")
-	errEmptyOEMID                 = errors.New(`invalid claim "oemid": zero value`)
+	errEmptyOEMID                 = errors.New(`invalid claim "oemid": non-positive value`)
 	errEmptySWName                = errors.New(`invalid claim "swname": empty value`)
 	errEmptySWVersion             = errors.New(`invalid claim "swversion": empty value`)
 	errEmptyNonceAdjustFunction   = errors.New(`invalid claim "nonce_adjust_function": empty value`)
