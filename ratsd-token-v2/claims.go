@@ -4,9 +4,7 @@ package ratsdtokenv2
 
 import (
 	"fmt"
-	"reflect"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/veraison/eat"
 )
 
@@ -49,11 +47,6 @@ type claimsCBOR struct {
 	NonceAdjustFunction *string          `cbor:"-65537,keyasint,omitempty"`
 	NonceAdjustMap      *map[string]uint `cbor:"-65538,keyasint,omitempty"`
 }
-
-var (
-	claimsEncMode = mustClaimsEncMode()
-	claimsDecMode = mustClaimsDecMode()
-)
 
 // SetNonce replaces the stored EAT nonce with the supplied raw nonce value.
 func (c *Claims) SetNonce(v []byte) error {
@@ -354,40 +347,6 @@ func (c claimsCBOR) toClaims() (Claims, error) {
 	}
 
 	return claims, nil
-}
-
-func newClaimsTagSet() cbor.TagSet {
-	tags := cbor.NewTagSet()
-	if err := tags.Add(
-		cbor.TagOptions{EncTag: cbor.EncTagRequired, DecTag: cbor.DecTagRequired},
-		reflect.TypeOf(claimsCBOR{}),
-		claimsTagNumber,
-	); err != nil {
-		panic(fmt.Sprintf("CBOR claims tag set initialization failed: %v", err))
-	}
-
-	return tags
-}
-
-func mustClaimsEncMode() cbor.EncMode {
-	mode, err := cbor.CoreDetEncOptions().EncModeWithTags(newClaimsTagSet())
-	if err != nil {
-		panic(fmt.Sprintf("CBOR claims encoder initialization failed: %v", err))
-	}
-
-	return mode
-}
-
-func mustClaimsDecMode() cbor.DecMode {
-	mode, err := cbor.DecOptions{
-		DupMapKey:         cbor.DupMapKeyEnforcedAPF,
-		ExtraReturnErrors: cbor.ExtraDecErrorUnknownField,
-	}.DecModeWithTags(newClaimsTagSet())
-	if err != nil {
-		panic(fmt.Sprintf("CBOR claims decoder initialization failed: %v", err))
-	}
-
-	return mode
 }
 
 func validateNonce(v []byte) error {
