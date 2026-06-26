@@ -3,6 +3,7 @@
 package api
 
 import (
+	"crypto/sha3"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/veraison/cmw"
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
+	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
 	"go.uber.org/zap"
 )
 
@@ -20,6 +22,7 @@ import (
 const (
 	ApplicationvndVeraisonCharesJson string = "application/vnd.veraison.chares+json"
 	JsonType                         string = "application/json"
+	nonceAdjustFunction              string = ratsdtoken.NonceAdjustFunctionShake256
 )
 
 type Server struct {
@@ -38,6 +41,36 @@ func responseCodeToHTTP(responseCode uint32) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func adjustNonce(nonce []byte, size uint32) ([]byte, error) {
+	return adjustNonceWithFunction(nonce, size, nonceAdjustFunction)
+}
+
+func adjustNonceWithFunction(nonce []byte, size uint32, function string) ([]byte, error) {
+	if size == 0 {
+		return nil, fmt.Errorf("nonce size must be greater than zero")
+	}
+
+	adjusted := make([]byte, int(size))
+	var h io.ReadWriter
+	switch function {
+	case ratsdtoken.NonceAdjustFunctionShake128:
+		h = sha3.NewSHAKE128()
+	case ratsdtoken.NonceAdjustFunctionShake256:
+		h = sha3.NewSHAKE256()
+	default:
+		return nil, fmt.Errorf("unsupported nonce adjustment function %q", function)
+	}
+
+	if _, err := h.Write(nonce); err != nil {
+		return nil, err
+	}
+	if _, err := h.Read(adjusted); err != nil {
+		return nil, err
+	}
+
+	return adjusted, nil
 }
 
 func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
@@ -170,11 +203,20 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	s.logger.Info("request nonce: ", requestNonce)
 	s.logger.Info("request media type: ", *(param.Accept))
 
-	// Use a map until we finalize ratsd output format
-	eat := make(map[string]interface{})
+	evidence := ratsdtoken.NewEvidence()
+	if err := evidence.Claims.SetNonce(nonce); err != nil {
+		errMsg := fmt.Errorf("invalid nonce in the request: %w", err).Error()
+		p := &problems.DefaultProblem{
+			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+			Title:  string(InvalidRequest),
+			Detail: errMsg,
+			Status: http.StatusBadRequest,
+		}
+		s.reportProblem(w, p)
+		return
+	}
+
 	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
-	eat["eat_profile"] = TagGithubCom2024Veraisonratsd
-	eat["eat_nonce"] = requestNonce
 	pl := s.manager.GetPluginList()
 	if len(pl) == 0 {
 		errMsg := "no sub-attester available"
@@ -204,7 +246,10 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		outputCt := formatOut.Formats[0].ContentType
+		var selectedFormat *compositor.Format
+		var outputCt string
+		selectedFormat = formatOut.Formats[0]
+		outputCt = selectedFormat.ContentType
 		params, hasOption := options[pn]
 		if !hasOption || string(params) == "null" {
 			params = json.RawMessage{}
@@ -227,7 +272,8 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			if desiredCt, ok := attesterOptions["content-type"]; ok {
 				for _, f := range formatOut.Formats {
 					if f.ContentType == desiredCt {
-						outputCt = desiredCt
+						selectedFormat = f
+						outputCt = selectedFormat.ContentType
 						validCt = true
 						break
 					}
@@ -249,9 +295,32 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 
 		s.logger.Info(pn, " output content type: ", outputCt)
+		attesterNonce, err := adjustNonce(nonce, selectedFormat.NonceSize)
+		if err != nil {
+			errMsg := fmt.Sprintf(
+				"failed to adjust nonce for attester %s: %s", pn, err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
+
+		if err := evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction); err != nil {
+			errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
+
+		if err := evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize)); err != nil {
+			errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return false
+		}
+
 		in := &compositor.EvidenceIn{
 			ContentType: outputCt,
-			Nonce:       nonce,
+			Nonce:       attesterNonce,
 			Options:     params,
 		}
 
@@ -288,17 +357,24 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
-	serialized, err := collection.MarshalJSON()
-	if err != nil {
+	if err := evidence.Claims.SetCMW(collection); err != nil {
 		errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
 		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 		s.reportProblem(w, p)
 		return
 	}
-	eat["cmw"] = serialized
+
+	response, err := evidence.MarshalJSON()
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to serialize RATSD token: %s", err.Error())
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		s.reportProblem(w, p)
+		return
+	}
+
 	w.Header().Set("Content-Type", respCt)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(eat)
+	w.Write(response)
 }
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {

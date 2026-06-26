@@ -3,6 +3,7 @@
 package api
 
 import (
+	"crypto/sha3"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,8 @@ import (
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
 	"github.com/veraison/ratsd/attesters/tsm"
+	"github.com/veraison/ratsd/proto/compositor"
+	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
 	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
@@ -27,6 +30,71 @@ const (
 	jsonType   = "application/json"
 	validNonce = "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA"
 )
+
+func decodeCharesClaims(t *testing.T, body []byte) ratsdtoken.Claims {
+	t.Helper()
+
+	var evidence ratsdtoken.Evidence
+	err := json.Unmarshal(body, &evidence)
+	assert.NoError(t, err)
+
+	claims, err := evidence.GetClaims()
+	assert.NoError(t, err)
+
+	return claims
+}
+
+func adjustNonceForTest(t *testing.T, nonce []byte, size uint32) []byte {
+	t.Helper()
+
+	adjusted := make([]byte, int(size))
+	h := sha3.NewSHAKE256()
+	_, err := h.Write(nonce)
+	assert.NoError(t, err)
+	_, err = h.Read(adjusted)
+	assert.NoError(t, err)
+
+	return adjusted
+}
+
+type testAttester struct {
+	t                   *testing.T
+	formats             []*compositor.Format
+	expectedContentType string
+	expectedNonce       []byte
+	evidence            []byte
+}
+
+func (t *testAttester) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
+	t.t.Helper()
+
+	assert.Equal(t.t, t.expectedContentType, in.ContentType)
+	assert.Equal(t.t, t.expectedNonce, in.Nonce)
+
+	return &compositor.EvidenceOut{
+		Status:     &compositor.Status{Result: true},
+		StatusCode: http.StatusOK,
+		Evidence:   t.evidence,
+	}
+}
+
+func (t *testAttester) GetOptions() *compositor.OptionsOut {
+	return &compositor.OptionsOut{Status: &compositor.Status{Result: true}}
+}
+
+func (t *testAttester) GetSubAttesterID() *compositor.SubAttesterIDOut {
+	return &compositor.SubAttesterIDOut{
+		Status:        &compositor.Status{Result: true},
+		SubAttesterID: &compositor.SubAttesterID{Name: "test-attester", Version: "1.0.0"},
+	}
+}
+
+func (t *testAttester) GetSupportedFormats() *compositor.SupportedFormatsOut {
+	return &compositor.SupportedFormatsOut{
+		Status:  &compositor.Status{Result: true},
+		Formats: t.formats,
+	}
+}
 
 func TestRatsdSubattesters_valid_requests(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -252,6 +320,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
+	adjustedNonce := adjustNonceForTest(t, realNonce, 64)
 
 	tests := []struct {
 		name, query string
@@ -294,19 +363,24 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, expectedCode, w.Code)
 			assert.Equal(t, expectedType, w.Result().Header.Get("Content-Type"))
 
-			var out map[string]string
-			err := json.Unmarshal(w.Body.Bytes(), &out)
-			assert.NoError(t, err)
-			assert.Equal(t, string(TagGithubCom2024Veraisonratsd), out["eat_profile"])
-			assert.Equal(t, validNonce, out["eat_nonce"])
-			assert.Contains(t, out, "cmw")
+			claims := decodeCharesClaims(t, w.Body.Bytes())
 
-			data, err := base64.StdEncoding.DecodeString(out["cmw"])
+			profile, err := claims.EatProfile.Get()
 			assert.NoError(t, err)
+			assert.Equal(t, ratsdtoken.LegacyProfile, profile)
 
-			collection := &cmw.CMW{}
-			err = collection.UnmarshalJSON([]byte(data))
-			assert.NoError(t, err)
+			nonce := claims.GetEatNonce()
+			if assert.NotNil(t, nonce) {
+				assert.Equal(t, 1, nonce.Len())
+				assert.Equal(t, realNonce, nonce.GetI(0))
+			}
+			assert.Equal(t, ratsdtoken.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+			assert.Equal(t, map[string]uint{"mock-tsm": 64}, claims.GetNonceAdjustMap())
+
+			collection := claims.GetCMW()
+			if !assert.NotNil(t, collection) {
+				return
+			}
 			assert.Equal(t, cmw.KindCollection, collection.GetKind())
 
 			c, err := collection.GetCollectionItem("mock-tsm")
@@ -321,10 +395,64 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
 			expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", tt.privlevel,
-				hex.EncodeToString([]byte(realNonce)))
+				hex.EncodeToString(adjustedNonce))
 			assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 		})
 	}
+}
+
+func TestRatsdChares_adjustsNonceToSelectedFormatSize(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var params RatsdCharesParams
+	param := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	params.Accept = &param
+	logger := log.Named("test")
+
+	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
+	selectedCt := "application/vnd.veraison.test-selected"
+	attesterName := "format-attester"
+	attester := &testAttester{
+		t: t,
+		formats: []*compositor.Format{
+			{ContentType: "application/vnd.veraison.test-default", NonceSize: 16},
+			{ContentType: selectedCt, NonceSize: 32},
+		},
+		expectedContentType: selectedCt,
+		expectedNonce:       adjustNonceForTest(t, realNonce, 32),
+		evidence:            []byte("evidence"),
+	}
+
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return([]string{attesterName}).AnyTimes()
+	dm.EXPECT().LookupByName(attesterName).Return(attester, nil).AnyTimes()
+
+	s := NewServer(logger, dm, "all")
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+		"%s":{"content-type":"%s"}}`, validNonce, attesterName, selectedCt))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, params)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
+
+	claims := decodeCharesClaims(t, w.Body.Bytes())
+	assert.Equal(t, ratsdtoken.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+	assert.Equal(t, map[string]uint{attesterName: 32}, claims.GetNonceAdjustMap())
+
+	collection := claims.GetCMW()
+	if !assert.NotNil(t, collection) {
+		return
+	}
+
+	c, err := collection.GetCollectionItem(attesterName)
+	assert.NoError(t, err)
+	assert.Equal(t, cmw.KindMonad, c.GetKind())
+	assert.Equal(t, selectedCt, c.GetMonadType())
+	assert.Equal(t, []byte("evidence"), c.GetMonadValue())
 }
 
 func TestRatsdChares_valid_request_selected_attesters(t *testing.T) {
@@ -353,20 +481,14 @@ func TestRatsdChares_valid_request_selected_attesters(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
 
-	var out map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &out)
-	assert.NoError(t, err)
-	assert.Contains(t, out, "cmw")
-
-	data, err := base64.StdEncoding.DecodeString(out["cmw"])
-	assert.NoError(t, err)
-
-	collection := &cmw.CMW{}
-	err = collection.UnmarshalJSON([]byte(data))
-	assert.NoError(t, err)
+	claims := decodeCharesClaims(t, w.Body.Bytes())
+	collection := claims.GetCMW()
+	if !assert.NotNil(t, collection) {
+		return
+	}
 	assert.Equal(t, cmw.KindCollection, collection.GetKind())
 
-	_, err = collection.GetCollectionItem("mock-tsm")
+	_, err := collection.GetCollectionItem("mock-tsm")
 	assert.NoError(t, err)
 
 	_, err = collection.GetCollectionItem("other-tsm")
@@ -399,20 +521,14 @@ func TestRatsdChares_valid_request_selected_attesters_in_all_mode(t *testing.T) 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
 
-	var out map[string]string
-	err := json.Unmarshal(w.Body.Bytes(), &out)
-	assert.NoError(t, err)
-	assert.Contains(t, out, "cmw")
-
-	data, err := base64.StdEncoding.DecodeString(out["cmw"])
-	assert.NoError(t, err)
-
-	collection := &cmw.CMW{}
-	err = collection.UnmarshalJSON([]byte(data))
-	assert.NoError(t, err)
+	claims := decodeCharesClaims(t, w.Body.Bytes())
+	collection := claims.GetCMW()
+	if !assert.NotNil(t, collection) {
+		return
+	}
 	assert.Equal(t, cmw.KindCollection, collection.GetKind())
 
-	_, err = collection.GetCollectionItem("mock-tsm")
+	_, err := collection.GetCollectionItem("mock-tsm")
 	assert.NoError(t, err)
 
 	_, err = collection.GetCollectionItem("other-tsm")
