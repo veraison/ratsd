@@ -16,12 +16,14 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/moogar0880/problems"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/veraison/cmw"
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
 	"github.com/veraison/ratsd/attesters/tsm"
 	"github.com/veraison/ratsd/proto/compositor"
 	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
+	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token-v2"
 	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
@@ -42,6 +44,21 @@ func decodeCharesClaims(t *testing.T, body []byte) ratsdtoken.Claims {
 	assert.NoError(t, err)
 
 	return claims
+}
+
+func decodeCharesV2(t *testing.T, body []byte) (ratsdtokenv2.Claims, cmw.CMW, []byte) {
+	t.Helper()
+
+	var evidence ratsdtokenv2.Evidence
+	require.NoError(t, evidence.UnmarshalCBOR(body))
+
+	claims, err := evidence.GetClaims()
+	require.NoError(t, err)
+
+	collection, err := evidence.GetCollection()
+	require.NoError(t, err)
+
+	return claims, collection, evidence.GetSignature()
 }
 
 func adjustNonceForTest(t *testing.T, nonce []byte, size uint32) []byte {
@@ -170,6 +187,33 @@ func TestRatsdChares_wrong_content_type(t *testing.T) {
 	assert.Equal(t, expectedBody, &body)
 }
 
+func TestRatsdChares_defaults_to_legacy_response_without_accept(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	logger := log.Named("test")
+
+	pluginList := []string{"mock-tsm"}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+
+	s := NewServer(logger, dm, "all")
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s"}`, validNonce))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, RatsdCharesParams{})
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, legacyCharesResponseMediaType, w.Result().Header.Get("Content-Type"))
+
+	claims := decodeCharesClaims(t, w.Body.Bytes())
+	profile, err := claims.EatProfile.Get()
+	assert.NoError(t, err)
+	assert.Equal(t, ratsdtoken.LegacyProfile, profile)
+}
+
 func TestRatsdChares_wrong_accept_type(t *testing.T) {
 	var params RatsdCharesParams
 
@@ -185,7 +229,12 @@ func TestRatsdChares_wrong_accept_type(t *testing.T) {
 	respCt := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
 	expectedCode := http.StatusNotAcceptable
 	expectedType := problems.ProblemMediaType
-	expectedDetail := fmt.Sprintf("wrong accept type, expect %s (got %s)", respCt, *(params.Accept))
+	expectedDetail := fmt.Sprintf(
+		"wrong accept type, expect %s or %s (got %s)",
+		respCt,
+		v2CharesResponseMediaType,
+		*(params.Accept),
+	)
 	expectedBody := problems.NewDetailedProblem(http.StatusNotAcceptable, expectedDetail)
 
 	var body problems.DefaultProblem
@@ -399,6 +448,69 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 		})
 	}
+}
+
+func TestRatsdChares_valid_request_v2(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var params RatsdCharesParams
+
+	param := v2CharesResponseMediaType
+	params.Accept = &param
+	logger := log.Named("test")
+
+	pluginList := []string{"mock-tsm"}
+	dm := mock_deps.NewMockIManager(ctrl)
+	dm.EXPECT().GetPluginList().Return(pluginList).AnyTimes()
+	dm.EXPECT().LookupByName("mock-tsm").Return(mocktsm.GetPlugin(), nil).AnyTimes()
+
+	s := NewServer(logger, dm, "all")
+	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
+	adjustedNonce := adjustNonceForTest(t, realNonce, 64)
+
+	w := httptest.NewRecorder()
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+		"mock-tsm":{
+			"privilege_level":"1"
+		}
+	}`, validNonce))
+	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
+	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
+	s.RatsdChares(w, r, params)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, param, w.Result().Header.Get("Content-Type"))
+
+	claims, collection, signature := decodeCharesV2(t, w.Body.Bytes())
+
+	assert.Equal(t, ratsdtokenv2.Profile, claims.GetEatProfile())
+	assert.Equal(t, realNonce, claims.GetEatNonce())
+	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterOEMID, claims.GetOEMID())
+	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterSWName, claims.GetSWName())
+	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterSWVersion, claims.GetSWVersion())
+	assert.Equal(t, ratsdtokenv2.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+	assert.Equal(t, map[string]uint{"mock-tsm": 64}, claims.GetNonceAdjustMap())
+	assert.Equal(t, []byte{0}, signature)
+
+	collectionType, err := collection.GetCollectionType()
+	require.NoError(t, err)
+	assert.Equal(t, ratsdtokenv2.CMWCollectionType, collectionType)
+
+	c, err := collection.GetCollectionItem("mock-tsm")
+	require.NoError(t, err)
+	assert.Equal(t, cmw.KindMonad, c.GetKind())
+	assert.Equal(t, tokens.TSMReportMediaTypeJSON, c.GetMonadType())
+	assert.Equal(t, cmw.Indicator(cmw.Evidence), c.GetMonadIndicator())
+
+	tsmout := &tokens.TSMReport{}
+	tsmout.FromJSON(c.GetMonadValue())
+	assert.Equal(t, "fake\n", tsmout.Provider)
+	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
+
+	expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", 1,
+		hex.EncodeToString(adjustedNonce))
+	assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 }
 
 func TestRatsdChares_adjustsNonceToSelectedFormatSize(t *testing.T) {
