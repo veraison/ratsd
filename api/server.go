@@ -44,12 +44,25 @@ func responseCodeToHTTP(responseCode uint32) int {
 }
 
 func adjustNonce(nonce []byte, size uint32) ([]byte, error) {
+	return adjustNonceWithFunction(nonce, size, nonceAdjustFunction)
+}
+
+func adjustNonceWithFunction(nonce []byte, size uint32, function string) ([]byte, error) {
 	if size == 0 {
 		return nil, fmt.Errorf("nonce size must be greater than zero")
 	}
 
 	adjusted := make([]byte, int(size))
-	h := sha3.NewSHAKE256()
+	var h io.ReadWriter
+	switch function {
+	case ratsdtoken.NonceAdjustFunctionShake128:
+		h = sha3.NewSHAKE128()
+	case ratsdtoken.NonceAdjustFunctionShake256:
+		h = sha3.NewSHAKE256()
+	default:
+		return nil, fmt.Errorf("unsupported nonce adjustment function %q", function)
+	}
+
 	if _, err := h.Write(nonce); err != nil {
 		return nil, err
 	}
@@ -192,7 +205,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 
 	evidence := ratsdtoken.NewEvidence()
 	if err := evidence.Claims.SetNonce(nonce); err != nil {
-		errMsg := fmt.Sprintf("invalid nonce in the request: %s", err.Error())
+		errMsg := fmt.Errorf("invalid nonce in the request: %w", err).Error()
 		p := &problems.DefaultProblem{
 			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
 			Title:  string(InvalidRequest),
@@ -233,8 +246,8 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		selectedFormat := formatOut.Formats[0]
-		outputCt := selectedFormat.ContentType
+		var selectedFormat = formatOut.Formats[0]
+		var outputCt = selectedFormat.ContentType
 		params, hasOption := options[pn]
 		if !hasOption || string(params) == "null" {
 			params = json.RawMessage{}
@@ -349,7 +362,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	response, err := json.Marshal(evidence)
+	response, err := evidence.MarshalJSON()
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to serialize RATSD token: %s", err.Error())
 		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
