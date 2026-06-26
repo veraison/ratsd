@@ -8,13 +8,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/moogar0880/problems"
 	"github.com/veraison/cmw"
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
 	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
+	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token-v2"
 	"go.uber.org/zap"
 )
 
@@ -23,12 +26,27 @@ const (
 	ApplicationvndVeraisonCharesJson string = "application/vnd.veraison.chares+json"
 	JsonType                         string = "application/json"
 	nonceAdjustFunction              string = ratsdtoken.NonceAdjustFunctionShake256
+	legacyCharesResponseMediaType    string = `application/eat-ucs+json; eat_profile="tag:github.com,2024:veraison/ratsd"`
+	v2CharesResponseMediaType        string = `application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2"`
+	legacyCMWCollectionType          string = "tag:github.com,2025:veraison/ratsd/cmw"
 )
 
 type Server struct {
 	logger  *zap.SugaredLogger
 	manager plugin.IManager
 	options string
+}
+
+type charesResponseFormat int
+
+const (
+	charesResponseLegacy charesResponseFormat = iota
+	charesResponseV2
+)
+
+type charesResponse struct {
+	format      charesResponseFormat
+	contentType string
 }
 
 func responseCodeToHTTP(responseCode uint32) int {
@@ -73,6 +91,72 @@ func adjustNonceWithFunction(nonce []byte, size uint32, function string) ([]byte
 	return adjusted, nil
 }
 
+func negotiateCharesResponse(accept *string) (charesResponse, error) {
+	defaultResponse := charesResponse{
+		format:      charesResponseLegacy,
+		contentType: legacyCharesResponseMediaType,
+	}
+	if accept == nil || strings.TrimSpace(*accept) == "" {
+		return defaultResponse, nil
+	}
+
+	for _, offered := range splitAcceptHeader(*accept) {
+		offered = strings.TrimSpace(offered)
+		if offered == "*/*" {
+			return defaultResponse, nil
+		}
+
+		mediaType, params, err := mime.ParseMediaType(offered)
+		if err != nil {
+			continue
+		}
+
+		switch mediaType {
+		case "application/eat-ucs+json":
+			if params["eat_profile"] == ratsdtoken.LegacyProfile {
+				return defaultResponse, nil
+			}
+		case "application/cmw+cbor":
+			if params["cmwct"] == ratsdtokenv2.Profile {
+				return charesResponse{
+					format:      charesResponseV2,
+					contentType: v2CharesResponseMediaType,
+				}, nil
+			}
+		}
+	}
+
+	return charesResponse{}, fmt.Errorf(
+		"wrong accept type, expect %s or %s (got %s)",
+		legacyCharesResponseMediaType,
+		v2CharesResponseMediaType,
+		*accept,
+	)
+}
+
+func splitAcceptHeader(accept string) []string {
+	values := []string{}
+	start := 0
+	inQuotes := false
+	escaped := false
+
+	for i, r := range accept {
+		switch {
+		case escaped:
+			escaped = false
+		case r == '\\' && inQuotes:
+			escaped = true
+		case r == '"':
+			inQuotes = !inQuotes
+		case r == ',' && !inQuotes:
+			values = append(values, accept[start:i])
+			start = i + 1
+		}
+	}
+
+	return append(values, accept[start:])
+}
+
 func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options string) *Server {
 	return &Server{
 		logger:  logger,
@@ -103,21 +187,19 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	respCt := fmt.Sprintf(`application/eat-ucs+json; eat_profile=%q`, TagGithubCom2024Veraisonratsd)
+	resp, err := negotiateCharesResponse(param.Accept)
 	if param.Accept != nil {
 		s.logger.Info("request media type: ", *(param.Accept))
-		if *(param.Accept) != respCt && *(param.Accept) != "*/*" {
-			errMsg := fmt.Sprintf(
-				"wrong accept type, expect %s (got %s)", respCt, *(param.Accept))
-			p := problems.NewDetailedProblem(http.StatusNotAcceptable, errMsg)
-			s.reportProblem(w, p)
-			return
-		}
+	}
+	if err != nil {
+		p := problems.NewDetailedProblem(http.StatusNotAcceptable, err.Error())
+		s.reportProblem(w, p)
+		return
 	}
 
 	payload, _ := io.ReadAll(r.Body)
 	requestFields := make(map[string]json.RawMessage)
-	err := json.Unmarshal(payload, &requestFields)
+	err = json.Unmarshal(payload, &requestFields)
 	if err != nil {
 		errMsg := "unable to deserialize JSON request body"
 		p := &problems.DefaultProblem{
@@ -201,10 +283,16 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 	s.logger.Info("request nonce: ", requestNonce)
-	s.logger.Info("request media type: ", *(param.Accept))
+	s.logger.Info("response media type: ", resp.contentType)
 
-	evidence := ratsdtoken.NewEvidence()
-	if err := evidence.Claims.SetNonce(nonce); err != nil {
+	legacyEvidence := ratsdtoken.NewEvidence()
+	v2Evidence := ratsdtokenv2.NewEvidence()
+	if resp.format == charesResponseV2 {
+		err = v2Evidence.Claims.SetNonce(nonce)
+	} else {
+		err = legacyEvidence.Claims.SetNonce(nonce)
+	}
+	if err != nil {
 		errMsg := fmt.Errorf("invalid nonce in the request: %w", err).Error()
 		p := &problems.DefaultProblem{
 			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
@@ -216,7 +304,10 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	var collection *cmw.CMW
+	if resp.format == charesResponseLegacy {
+		collection = cmw.NewCollection(legacyCMWCollectionType)
+	}
 	pl := s.manager.GetPluginList()
 	if len(pl) == 0 {
 		errMsg := "no sub-attester available"
@@ -304,14 +395,24 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		if err := evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction); err != nil {
+		if resp.format == charesResponseV2 {
+			err = v2Evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+		} else {
+			err = legacyEvidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+		}
+		if err != nil {
 			errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
 			return false
 		}
 
-		if err := evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize)); err != nil {
+		if resp.format == charesResponseV2 {
+			err = v2Evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
+		} else {
+			err = legacyEvidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
+		}
+		if err != nil {
 			errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
 			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
 			s.reportProblem(w, p)
@@ -333,8 +434,17 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		c := cmw.NewMonad(in.ContentType, out.Evidence)
-		collection.AddCollectionItem(pn, c)
+		if resp.format == charesResponseV2 {
+			if err := v2Evidence.SetToken(pn, in.ContentType, out.Evidence, cmw.Evidence); err != nil {
+				errMsg := fmt.Sprintf("failed to add evidence from %s: %s", pn, err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
+		} else {
+			c := cmw.NewMonad(in.ContentType, out.Evidence)
+			collection.AddCollectionItem(pn, c)
+		}
 		return true
 	}
 
@@ -357,14 +467,27 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
-	if err := evidence.Claims.SetCMW(collection); err != nil {
-		errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
-		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-		s.reportProblem(w, p)
-		return
-	}
+	var response []byte
+	if resp.format == charesResponseV2 {
+		// Token signing is not configured by the API yet, but COSE_Sign1
+		// serialization requires a non-empty signature field.
+		if err := v2Evidence.SetSignature([]byte{0}); err != nil {
+			errMsg := fmt.Sprintf("failed to set RATSD v2 token signature: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
+		response, err = v2Evidence.MarshalCBOR()
+	} else {
+		if err := legacyEvidence.Claims.SetCMW(collection); err != nil {
+			errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+			s.reportProblem(w, p)
+			return
+		}
 
-	response, err := evidence.MarshalJSON()
+		response, err = legacyEvidence.MarshalJSON()
+	}
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to serialize RATSD token: %s", err.Error())
 		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
@@ -372,7 +495,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	w.Header().Set("Content-Type", respCt)
+	w.Header().Set("Content-Type", resp.contentType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
 }
