@@ -246,8 +246,10 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		var selectedFormat = formatOut.Formats[0]
-		var outputCt = selectedFormat.ContentType
+		var selectedFormat *compositor.Format
+		var outputCt string
+		selectedFormat = formatOut.Formats[0]
+		outputCt = selectedFormat.ContentType
 		params, hasOption := options[pn]
 		if !hasOption || string(params) == "null" {
 			params = json.RawMessage{}
