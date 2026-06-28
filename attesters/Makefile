@@ -3,6 +3,7 @@
 
 SUBDIR := tsm
 SUBDIR += mocktsm
+SUBDIR += gpu
 
 clean: ; $(RM) -rf ./bin
 
