@@ -1,0 +1,21 @@
+{
+  "__cmwc_t": "tag:github.com,2025:veraison/ratsd/cmw",
+  "mock-tsm": [
+    "application/vnd.veraison.configfs-tsm+json",
+    {
+      "auxblob": "bW9jay10c20tYXV4",
+      "outblob": "bW9jay10c20tb3V0YmxvYi1kYXRhLWZvci1tdWx0aS1hdHRlc3Rlci1leGFtcGxl",
+      "provider": "mock-hardware",
+      "privilege_level": "1"
+    }
+  ],
+  "tsm-report": [
+    "application/vnd.veraison.configfs-tsm+json", 
+    {
+      "auxblob": "dHNtLXJlcG9ydC1hdXgtbXVsdGk=",
+      "outblob": "dHNtLXJlcG9ydC1vdXRibG9iLWRhdGEtZm9yLW11bHRpLWF0dGVzdGVyLWV4YW1wbGUtd2l0aC1ib3RoLWF0dGVzdGVycy1wcmVzZW50",
+      "provider": "real-tsm",
+      "privilege_level": "2"
+    }
+  ]
+}
