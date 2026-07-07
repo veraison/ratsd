@@ -43,6 +43,11 @@ func validGPUWireEvidence() []gpuDeviceEvidenceWire {
 	}
 }
 
+func Test_GPUEvidence_MediaTypes(t *testing.T) {
+	assert.Equal(t, "application/vnd.veraison.nvidia-gpu-evidence+cbor", GPUEvidenceMediaTypeCBOR)
+	assert.Equal(t, "application/vnd.veraison.nvidia-gpu-evidence+json", GPUEvidenceMediaTypeJSON)
+}
+
 func Test_GPUEvidence_Valid_Pass(t *testing.T) {
 	assert.NoError(t, validGPUEvidence().Valid())
 }

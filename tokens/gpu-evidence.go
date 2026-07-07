@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	GPUEvidenceMediaTypeCBOR = "application/vnd.veraison.nv-gpu-evidence+cbor"
-	GPUEvidenceMediaTypeJSON = "application/vnd.veraison.nv-gpu-evidence+json"
+	GPUEvidenceMediaTypeCBOR = "application/vnd.veraison.nvidia-gpu-evidence+cbor"
+	GPUEvidenceMediaTypeJSON = "application/vnd.veraison.nvidia-gpu-evidence+json"
 
 	gpuEvidenceNonceSize = 32
 )
