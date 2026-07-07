@@ -92,26 +92,6 @@ func (g *GPUEvidence) FromJSON(data []byte) error {
 	return nil
 }
 
-func (g *GPUEvidence) ToCBOR() ([]byte, error) {
-	if err := g.Valid(); err != nil {
-		return nil, fmt.Errorf("CBOR encoding failed: %w", err)
-	}
-
-	return cbor.Marshal(g)
-}
-
-func (g *GPUEvidence) FromCBOR(data []byte) error {
-	if err := cbor.Unmarshal(data, g); err != nil {
-		return fmt.Errorf("CBOR decoding failed: %w", err)
-	}
-
-	if err := g.Valid(); err != nil {
-		return fmt.Errorf("CBOR decoding failed: %w", err)
-	}
-
-	return nil
-}
-
 func (g GPUEvidence) MarshalJSON() ([]byte, error) {
 	wireDevices, err := g.toWireDevices()
 	if err != nil {

@@ -119,7 +119,7 @@ func Test_GPUEvidence_JSON_SerDes_Pass(t *testing.T) {
 func Test_GPUEvidence_CBOR_WireShape(t *testing.T) {
 	evidence := validGPUEvidence()
 
-	encodedCBOR, err := evidence.ToCBOR()
+	encodedCBOR, err := cbor.Marshal(evidence)
 	assert.NoError(t, err)
 
 	var wire []gpuDeviceEvidenceWire
@@ -130,11 +130,11 @@ func Test_GPUEvidence_CBOR_WireShape(t *testing.T) {
 func Test_GPUEvidence_CBOR_SerDes_Pass(t *testing.T) {
 	evidence := validGPUEvidence()
 
-	encodedCBOR, err := evidence.ToCBOR()
+	encodedCBOR, err := cbor.Marshal(evidence)
 	assert.NoError(t, err)
 
 	decodedEvidence := &GPUEvidence{}
-	assert.NoError(t, decodedEvidence.FromCBOR(encodedCBOR))
+	assert.NoError(t, cbor.Unmarshal(encodedCBOR, decodedEvidence))
 
 	assert.True(t, reflect.DeepEqual(evidence, decodedEvidence))
 }
