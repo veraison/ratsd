@@ -14,7 +14,6 @@ import (
 
 const (
 	ApplicationvndVeraisonNvGpuEvidenceJSON = tokens.GPUEvidenceMediaTypeJSON
-	ApplicationvndVeraisonNvGpuEvidenceCBOR = tokens.GPUEvidenceMediaTypeCBOR
 	gpuNonceSize                            = nvml.CC_GPU_CEC_NONCE_SIZE
 )
 
@@ -27,10 +26,6 @@ var (
 	supportedFormats = []*compositor.Format{
 		{
 			ContentType: ApplicationvndVeraisonNvGpuEvidenceJSON,
-			NonceSize:   gpuNonceSize,
-		},
-		{
-			ContentType: ApplicationvndVeraisonNvGpuEvidenceCBOR,
 			NonceSize:   gpuNonceSize,
 		},
 	}
@@ -200,12 +195,6 @@ func encodeEvidence(contentType string, nonce []byte, devices []nvgpu.GPUDevice)
 		encodedEvidence, err := token.ToJSON()
 		if err != nil {
 			return nil, fmt.Errorf("failed to JSON encode GPU evidence: %v", err)
-		}
-		return encodedEvidence, nil
-	case ApplicationvndVeraisonNvGpuEvidenceCBOR:
-		encodedEvidence, err := token.ToCBOR()
-		if err != nil {
-			return nil, fmt.Errorf("failed to CBOR encode GPU evidence: %v", err)
 		}
 		return encodedEvidence, nil
 	default:

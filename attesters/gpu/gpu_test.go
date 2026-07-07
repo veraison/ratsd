@@ -142,6 +142,22 @@ func Test_GetEvidence_InvalidFormat(t *testing.T) {
 	assert.Equal(t, expected, NewPlugin().GetEvidence(in))
 }
 
+func Test_GetEvidence_CBORMediaTypeUnsupported(t *testing.T) {
+	in := &compositor.EvidenceIn{
+		ContentType: "application/vnd.veraison.nvidia-gpu-evidence+cbor",
+		Nonce:       []byte("12345678901234567890123456789012"),
+	}
+
+	expected := &compositor.EvidenceOut{
+		Status: &compositor.Status{
+			Result: false,
+			Error:  "no supported format in gpu plugin matches the requested format",
+		},
+	}
+
+	assert.Equal(t, expected, NewPlugin().GetEvidence(in))
+}
+
 func Test_GetEvidence_InvalidOptions(t *testing.T) {
 	tests := []struct {
 		name string
@@ -239,41 +255,6 @@ func Test_GetEvidence_JSON(t *testing.T) {
 	assert.Equal(t, expected, p.GetEvidence(in))
 	assert.Equal(t, nonce, collector.collectedNonce)
 	assert.True(t, collector.shutdownInvoked)
-}
-
-func Test_GetEvidence_CBOR(t *testing.T) {
-	collector := &fakeCollector{
-		devices: validGPUDevices(t),
-	}
-	p := makePlugin(func() (evidenceCollector, error) {
-		return collector, nil
-	})
-
-	nonce := []byte("12345678901234567890123456789012")
-	in := &compositor.EvidenceIn{
-		ContentType: ApplicationvndVeraisonNvGpuEvidenceCBOR,
-		Nonce:       nonce,
-	}
-
-	expectedToken := &tokens.GPUEvidence{
-		Devices: []tokens.GPUDeviceEvidence{
-			{
-				Nonce:             nonce,
-				Arch:              "HOPPER",
-				AttestationReport: []byte("attestation-report"),
-				CertificateChain:  mustCertChainBase64(t),
-			},
-		},
-	}
-	expectedEvidence, err := expectedToken.ToCBOR()
-	assert.NoError(t, err)
-
-	expected := &compositor.EvidenceOut{
-		Status:   statusSucceeded,
-		Evidence: expectedEvidence,
-	}
-
-	assert.Equal(t, expected, p.GetEvidence(in))
 }
 
 func Test_GetEvidence_ShutdownFailure(t *testing.T) {
