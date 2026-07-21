@@ -4,12 +4,12 @@ package tokens
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,17 +28,6 @@ func validGPUEvidence() *GPUEvidence {
 				AttestationReport: gpuReport,
 				CertificateChain:  gpuCertificate,
 			},
-		},
-	}
-}
-
-func validGPUWireEvidence() []gpuDeviceEvidenceWire {
-	return []gpuDeviceEvidenceWire{
-		{
-			Arch:              "HOPPER",
-			CertificateChain:  gpuCertificate,
-			AttestationReport: base64.StdEncoding.EncodeToString(gpuReport),
-			Nonce:             hex.EncodeToString(gpuNonce),
 		},
 	}
 }
@@ -62,7 +51,7 @@ func Test_GPUEvidence_Valid_Fail_WrongNonceSize(t *testing.T) {
 	evidence := validGPUEvidence()
 	evidence.Devices[0].Nonce = []byte("short")
 
-	assert.EqualError(t, evidence.Valid(), `invalid field "[0].nonce": expected 32 bytes, got 5`)
+	assert.EqualError(t, evidence.Valid(), fmt.Sprintf(`invalid field "[0].nonce": expected %d bytes, got 5`, nvml.CC_GPU_CEC_NONCE_SIZE))
 }
 
 func Test_GPUEvidence_Valid_Fail_MissingDevices(t *testing.T) {
@@ -70,6 +59,19 @@ func Test_GPUEvidence_Valid_Fail_MissingDevices(t *testing.T) {
 	evidence.Devices = nil
 
 	assert.EqualError(t, evidence.Valid(), "missing mandatory GPU evidence device")
+}
+
+func Test_GPUEvidence_ToJSON_Fail_NilEvidence(t *testing.T) {
+	var evidence *GPUEvidence
+
+	_, err := evidence.ToJSON()
+	assert.EqualError(t, err, "JSON encoding failed: nil GPU evidence")
+}
+
+func Test_GPUEvidence_FromJSON_Fail_NilEvidence(t *testing.T) {
+	var evidence *GPUEvidence
+
+	assert.EqualError(t, evidence.FromJSON([]byte("[]")), "JSON decoding failed: nil GPU evidence")
 }
 
 func Test_GPUEvidence_Valid_Fail_InvalidArch(t *testing.T) {
@@ -99,9 +101,16 @@ func Test_GPUEvidence_JSON_WireShape(t *testing.T) {
 	encodedJSON, err := evidence.ToJSON()
 	assert.NoError(t, err)
 
-	var wire []gpuDeviceEvidenceWire
+	var wire []map[string]string
 	assert.NoError(t, json.Unmarshal(encodedJSON, &wire))
-	assert.Equal(t, validGPUWireEvidence(), wire)
+	assert.Equal(t, []map[string]string{
+		{
+			"arch":        "HOPPER",
+			"certificate": gpuCertificate,
+			"evidence":    base64.StdEncoding.EncodeToString(gpuReport),
+			"nonce":       base64.StdEncoding.EncodeToString(gpuNonce),
+		},
+	}, wire)
 }
 
 func Test_GPUEvidence_JSON_SerDes_Pass(t *testing.T) {
@@ -112,29 +121,6 @@ func Test_GPUEvidence_JSON_SerDes_Pass(t *testing.T) {
 
 	decodedEvidence := &GPUEvidence{}
 	assert.NoError(t, decodedEvidence.FromJSON(encodedJSON))
-
-	assert.True(t, reflect.DeepEqual(evidence, decodedEvidence))
-}
-
-func Test_GPUEvidence_CBOR_WireShape(t *testing.T) {
-	evidence := validGPUEvidence()
-
-	encodedCBOR, err := cbor.Marshal(evidence)
-	assert.NoError(t, err)
-
-	var wire []gpuDeviceEvidenceWire
-	assert.NoError(t, cbor.Unmarshal(encodedCBOR, &wire))
-	assert.Equal(t, validGPUWireEvidence(), wire)
-}
-
-func Test_GPUEvidence_CBOR_SerDes_Pass(t *testing.T) {
-	evidence := validGPUEvidence()
-
-	encodedCBOR, err := cbor.Marshal(evidence)
-	assert.NoError(t, err)
-
-	decodedEvidence := &GPUEvidence{}
-	assert.NoError(t, cbor.Unmarshal(encodedCBOR, decodedEvidence))
 
 	assert.True(t, reflect.DeepEqual(evidence, decodedEvidence))
 }

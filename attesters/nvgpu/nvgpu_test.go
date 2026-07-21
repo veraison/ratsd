@@ -1,6 +1,6 @@
 // Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
-package gpu
+package nvgpu
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	"github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/certs"
-	nvgpu "github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/gpu"
+	nvtrustgpu "github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/gpu"
 	nvmocks "github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/veraison/ratsd/proto/compositor"
@@ -17,14 +17,14 @@ import (
 )
 
 type fakeCollector struct {
-	devices         []nvgpu.GPUDevice
+	devices         []nvtrustgpu.GPUDevice
 	collectErr      error
 	shutdownErr     error
 	collectedNonce  []byte
 	shutdownInvoked bool
 }
 
-func (f *fakeCollector) CollectEvidence(nonce []byte) ([]nvgpu.GPUDevice, error) {
+func (f *fakeCollector) CollectEvidence(nonce []byte) ([]nvtrustgpu.GPUDevice, error) {
 	f.collectedNonce = append([]byte(nil), nonce...)
 	if f.collectErr != nil {
 		return nil, f.collectErr
@@ -38,19 +38,25 @@ func (f *fakeCollector) Shutdown() error {
 	return f.shutdownErr
 }
 
-func makePlugin(factory collectorFactory) *GPUPlugin {
-	return &GPUPlugin{newCollector: factory}
+func makePlugin(factory collectorFactory) *Plugin {
+	return newPlugin(factory)
 }
 
-func validGPUDevices(t *testing.T) []nvgpu.GPUDevice {
+func availablePlugin() *Plugin {
+	return makePlugin(func() (evidenceCollector, error) {
+		return &fakeCollector{}, nil
+	})
+}
+
+func validGPUDevices(t *testing.T) []nvtrustgpu.GPUDevice {
 	t.Helper()
 
 	certChain := certs.NewCertChainFromData(nvmocks.ValidCertChainData)
 	requireErr := certChain.Verify()
 	assert.NoError(t, requireErr)
 
-	return []nvgpu.GPUDevice{
-		nvgpu.NewGPUDevice(
+	return []nvtrustgpu.GPUDevice{
+		nvtrustgpu.NewGPUDevice(
 			nvml.DEVICE_ARCH_HOPPER,
 			[]byte("attestation-report"),
 			certChain,
@@ -64,7 +70,7 @@ func Test_GetOptions(t *testing.T) {
 		Status:  statusSucceeded,
 	}
 
-	assert.Equal(t, expected, NewPlugin().GetOptions())
+	assert.Equal(t, expected, availablePlugin().GetOptions())
 }
 
 func Test_GetSubAttesterID(t *testing.T) {
@@ -73,12 +79,14 @@ func Test_GetSubAttesterID(t *testing.T) {
 		Status:        statusSucceeded,
 	}
 
-	assert.Equal(t, expected, NewPlugin().GetSubAttesterID())
+	assert.Equal(t, expected, availablePlugin().GetSubAttesterID())
 }
 
 func Test_GetSupportedFormats(t *testing.T) {
 	collector := &fakeCollector{}
+	factoryCalls := 0
 	p := makePlugin(func() (evidenceCollector, error) {
+		factoryCalls++
 		return collector, nil
 	})
 
@@ -88,6 +96,7 @@ func Test_GetSupportedFormats(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, p.GetSupportedFormats())
+	assert.Equal(t, 1, factoryCalls)
 	assert.True(t, collector.shutdownInvoked)
 }
 
@@ -99,7 +108,22 @@ func Test_GetSupportedFormats_InitFailure(t *testing.T) {
 	expected := &compositor.SupportedFormatsOut{
 		Status: &compositor.Status{
 			Result: false,
-			Error:  "GPU evidence collection is not available: nvml unavailable",
+			Error:  "NVIDIA GPU evidence collection is not available: nvml unavailable",
+		},
+	}
+
+	assert.Equal(t, expected, p.GetSupportedFormats())
+}
+
+func Test_GetSupportedFormats_ShutdownFailure(t *testing.T) {
+	p := makePlugin(func() (evidenceCollector, error) {
+		return &fakeCollector{shutdownErr: errors.New("shutdown failed")}, nil
+	})
+
+	expected := &compositor.SupportedFormatsOut{
+		Status: &compositor.Status{
+			Result: false,
+			Error:  "NVIDIA GPU evidence collection is not available: shutdown failed",
 		},
 	}
 
@@ -113,8 +137,8 @@ func Test_GetEvidence_WrongNonceSize(t *testing.T) {
 	}
 
 	errMsg := fmt.Sprintf(
-		"nonce size of the GPU attester should be %d, got %d",
-		gpuNonceSize, len(in.Nonce),
+		"nonce size of the NVIDIA GPU attester should be %d, got %d",
+		nonceSize, len(in.Nonce),
 	)
 	expected := &compositor.EvidenceOut{
 		Status: &compositor.Status{
@@ -123,7 +147,7 @@ func Test_GetEvidence_WrongNonceSize(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, expected, NewPlugin().GetEvidence(in))
+	assert.Equal(t, expected, availablePlugin().GetEvidence(in))
 }
 
 func Test_GetEvidence_InvalidFormat(t *testing.T) {
@@ -135,11 +159,11 @@ func Test_GetEvidence_InvalidFormat(t *testing.T) {
 	expected := &compositor.EvidenceOut{
 		Status: &compositor.Status{
 			Result: false,
-			Error:  "no supported format in gpu plugin matches the requested format",
+			Error:  "no supported format in nvgpu plugin matches the requested format",
 		},
 	}
 
-	assert.Equal(t, expected, NewPlugin().GetEvidence(in))
+	assert.Equal(t, expected, availablePlugin().GetEvidence(in))
 }
 
 func Test_GetEvidence_CBORMediaTypeUnsupported(t *testing.T) {
@@ -151,11 +175,11 @@ func Test_GetEvidence_CBORMediaTypeUnsupported(t *testing.T) {
 	expected := &compositor.EvidenceOut{
 		Status: &compositor.Status{
 			Result: false,
-			Error:  "no supported format in gpu plugin matches the requested format",
+			Error:  "no supported format in nvgpu plugin matches the requested format",
 		},
 	}
 
-	assert.Equal(t, expected, NewPlugin().GetEvidence(in))
+	assert.Equal(t, expected, availablePlugin().GetEvidence(in))
 }
 
 func Test_GetEvidence_InvalidOptions(t *testing.T) {
@@ -172,7 +196,7 @@ func Test_GetEvidence_InvalidOptions(t *testing.T) {
 		{
 			name: "unsupported option",
 			opts: `{"mode":"full"}`,
-			msg:  "gpu attester does not support options",
+			msg:  "NVIDIA GPU attester does not support options",
 		},
 	}
 
@@ -191,7 +215,7 @@ func Test_GetEvidence_InvalidOptions(t *testing.T) {
 				},
 			}
 
-			assert.Equal(t, expected, NewPlugin().GetEvidence(in))
+			assert.Equal(t, expected, availablePlugin().GetEvidence(in))
 		})
 	}
 }

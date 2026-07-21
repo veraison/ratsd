@@ -37,6 +37,11 @@ make[3]: Leaving directory '/builddir/build/BUILD/ratsd-1.0.3+la3/attesters/mock
 make[2]: Leaving directory '/builddir/build/BUILD/ratsd-1.0.3+la3/attesters/mocktsm'
 make[1]: Leaving directory '/builddir/build/BUILD/ratsd-1.0.3+la3/attesters'
 ```
+
+### NVIDIA GPU attester prerequisites
+
+The `nvgpu` attester supports NVIDIA Hopper and Blackwell GPUs with confidential computing enabled. The attester host must have a compatible NVIDIA driver installed; the driver provides the `libnvidia-ml.so.1` NVML library that the plugin loads at runtime. Containerized deployments must expose the NVIDIA devices and driver libraries to the container.
+
 # Query ratsd
 
 By default, ratsd core listens on port 8895. Use `POST /ratsd/chares` to retrieve a CMW collection containing evidence from each sub-attester. This API call requires the request body to be the JSON object `{"nonce": $(Base64 string of 64-byte data)}` replacing the placeholder with a proper base64 string. See the following example:

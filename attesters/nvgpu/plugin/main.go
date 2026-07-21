@@ -3,11 +3,11 @@
 package main
 
 import (
-	"github.com/veraison/ratsd/attesters/gpu"
+	"github.com/veraison/ratsd/attesters/nvgpu"
 	"github.com/veraison/ratsd/plugin"
 )
 
 func main() {
-	plugin.RegisterImplementation(gpu.NewPlugin())
+	plugin.RegisterImplementation(nvgpu.NewPlugin())
 	plugin.Serve()
 }

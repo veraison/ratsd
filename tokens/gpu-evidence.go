@@ -4,18 +4,17 @@ package tokens
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/fxamacker/cbor/v2"
+	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
 const (
 	GPUEvidenceMediaTypeJSON = "application/vnd.veraison.nvidia-gpu-evidence+json"
 
-	gpuEvidenceNonceSize = 32
+	gpuEvidenceNonceSize = nvml.CC_GPU_CEC_NONCE_SIZE
 )
 
 type GPUDeviceEvidence struct {
@@ -29,18 +28,7 @@ type GPUEvidence struct {
 	Devices []GPUDeviceEvidence `json:"devices"`
 }
 
-type gpuDeviceEvidenceWire struct {
-	Arch              string `json:"arch"`
-	CertificateChain  string `json:"certificate"`
-	AttestationReport string `json:"evidence"`
-	Nonce             string `json:"nonce"`
-}
-
-func (g *GPUEvidence) Valid() error {
-	if g == nil {
-		return errors.New("nil GPU evidence")
-	}
-
+func (g GPUEvidence) Valid() error {
 	if len(g.Devices) == 0 {
 		return errors.New("missing mandatory GPU evidence device")
 	}
@@ -73,15 +61,23 @@ func (g *GPUEvidence) Valid() error {
 }
 
 func (g *GPUEvidence) ToJSON() ([]byte, error) {
+	if g == nil {
+		return nil, errors.New("JSON encoding failed: nil GPU evidence")
+	}
+
 	if err := g.Valid(); err != nil {
 		return nil, fmt.Errorf("JSON encoding failed: %w", err)
 	}
 
-	return json.Marshal(g)
+	return json.Marshal(g.Devices)
 }
 
 func (g *GPUEvidence) FromJSON(data []byte) error {
-	if err := json.Unmarshal(data, g); err != nil {
+	if g == nil {
+		return errors.New("JSON decoding failed: nil GPU evidence")
+	}
+
+	if err := json.Unmarshal(data, &g.Devices); err != nil {
 		return fmt.Errorf("JSON decoding failed: %w", err)
 	}
 
@@ -90,109 +86,4 @@ func (g *GPUEvidence) FromJSON(data []byte) error {
 	}
 
 	return nil
-}
-
-func (g GPUEvidence) MarshalJSON() ([]byte, error) {
-	wireDevices, err := g.toWireDevices()
-	if err != nil {
-		return nil, err
-	}
-
-	return json.Marshal(wireDevices)
-}
-
-func (g *GPUEvidence) UnmarshalJSON(data []byte) error {
-	if g == nil {
-		return errors.New("nil GPU evidence")
-	}
-
-	var wireDevices []gpuDeviceEvidenceWire
-	if err := json.Unmarshal(data, &wireDevices); err != nil {
-		return err
-	}
-
-	decoded, err := gpuEvidenceFromWireDevices(wireDevices)
-	if err != nil {
-		return err
-	}
-
-	*g = decoded
-	return nil
-}
-
-func (g GPUEvidence) MarshalCBOR() ([]byte, error) {
-	wireDevices, err := g.toWireDevices()
-	if err != nil {
-		return nil, err
-	}
-
-	return cbor.Marshal(wireDevices)
-}
-
-func (g *GPUEvidence) UnmarshalCBOR(data []byte) error {
-	if g == nil {
-		return errors.New("nil GPU evidence")
-	}
-
-	var wireDevices []gpuDeviceEvidenceWire
-	if err := cbor.Unmarshal(data, &wireDevices); err != nil {
-		return err
-	}
-
-	decoded, err := gpuEvidenceFromWireDevices(wireDevices)
-	if err != nil {
-		return err
-	}
-
-	*g = decoded
-	return nil
-}
-
-func (g GPUEvidence) toWireDevices() ([]gpuDeviceEvidenceWire, error) {
-	if err := (&g).Valid(); err != nil {
-		return nil, err
-	}
-
-	wireDevices := make([]gpuDeviceEvidenceWire, len(g.Devices))
-	for i, device := range g.Devices {
-		wireDevices[i] = gpuDeviceEvidenceWire{
-			Arch:              device.Arch,
-			CertificateChain:  device.CertificateChain,
-			AttestationReport: base64.StdEncoding.EncodeToString(device.AttestationReport),
-			Nonce:             hex.EncodeToString(device.Nonce),
-		}
-	}
-
-	return wireDevices, nil
-}
-
-func gpuEvidenceFromWireDevices(wireDevices []gpuDeviceEvidenceWire) (GPUEvidence, error) {
-	evidence := GPUEvidence{
-		Devices: make([]GPUDeviceEvidence, len(wireDevices)),
-	}
-
-	for i, wireDevice := range wireDevices {
-		nonce, err := hex.DecodeString(wireDevice.Nonce)
-		if err != nil {
-			return GPUEvidence{}, fmt.Errorf(`invalid field "[%d].nonce": %w`, i, err)
-		}
-
-		report, err := base64.StdEncoding.DecodeString(wireDevice.AttestationReport)
-		if err != nil {
-			return GPUEvidence{}, fmt.Errorf(`invalid field "[%d].evidence": %w`, i, err)
-		}
-
-		evidence.Devices[i] = GPUDeviceEvidence{
-			Nonce:             nonce,
-			Arch:              wireDevice.Arch,
-			AttestationReport: report,
-			CertificateChain:  wireDevice.CertificateChain,
-		}
-	}
-
-	if err := evidence.Valid(); err != nil {
-		return GPUEvidence{}, err
-	}
-
-	return evidence, nil
 }

@@ -10,4 +10,4 @@ nvidia-gpu-evidence = [
 arch-type = "BLACKWELL" / "HOPPER"
 certificate-type = text .b64c bytes
 evidence-type = text .b64c bytes
-nonce-type = text .hex (bytes .size 32)
+nonce-type = text .b64c (bytes .size 32)

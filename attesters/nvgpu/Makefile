@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 .DEFAULT_GOAL := test
 
-GOPKG := github.com/veraison/ratsd/attesters/gpu
+GOPKG := github.com/veraison/ratsd/attesters/nvgpu
 SRCS := $(wildcard *.go)
 
 SUBDIR += plugin
