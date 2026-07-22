@@ -26,11 +26,11 @@ func (o *PassthroughAuthorizer) Init(v *viper.Viper, logger *zap.SugaredLogger) 
 	return nil
 }
 
-func (o *PassthroughAuthorizer) Close() error {
+func (o PassthroughAuthorizer) Close() error {
 	return nil
 }
 
-func (o *PassthroughAuthorizer) GetMiddleware(next http.Handler) http.Handler {
+func (o PassthroughAuthorizer) GetMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			o.logger.Debugw("passthrough", "path", r.URL.Path)
