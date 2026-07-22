@@ -61,13 +61,6 @@ func Test_GPUEvidence_Valid_Fail_MissingDevices(t *testing.T) {
 	assert.EqualError(t, evidence.Valid(), "missing mandatory GPU evidence device")
 }
 
-func Test_GPUEvidence_ToJSON_Fail_NilEvidence(t *testing.T) {
-	var evidence *GPUEvidence
-
-	_, err := evidence.ToJSON()
-	assert.EqualError(t, err, "JSON encoding failed: nil GPU evidence")
-}
-
 func Test_GPUEvidence_FromJSON_Fail_NilEvidence(t *testing.T) {
 	var evidence *GPUEvidence
 

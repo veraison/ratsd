@@ -96,7 +96,7 @@ func (p *Plugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	}
 }
 
-func (p *Plugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
+func (p Plugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	if p.availabilityErr != nil {
 		return &compositor.SupportedFormatsOut{
 			Status: &compositor.Status{

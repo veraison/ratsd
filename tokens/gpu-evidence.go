@@ -60,11 +60,7 @@ func (g GPUEvidence) Valid() error {
 	return nil
 }
 
-func (g *GPUEvidence) ToJSON() ([]byte, error) {
-	if g == nil {
-		return nil, errors.New("JSON encoding failed: nil GPU evidence")
-	}
-
+func (g GPUEvidence) ToJSON() ([]byte, error) {
 	if err := g.Valid(); err != nil {
 		return nil, fmt.Errorf("JSON encoding failed: %w", err)
 	}
