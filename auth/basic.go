@@ -74,11 +74,11 @@ func (o *BasicAuthorizer) Init(v *viper.Viper, logger *zap.SugaredLogger) error 
 	return nil
 }
 
-func (o *BasicAuthorizer) Close() error {
+func (o BasicAuthorizer) Close() error {
 	return nil
 }
 
-func (o *BasicAuthorizer) GetMiddleware(next http.Handler) http.Handler {
+func (o BasicAuthorizer) GetMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			o.logger.Debugw("auth basic", "path", r.URL.Path)
