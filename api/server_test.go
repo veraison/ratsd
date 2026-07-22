@@ -82,7 +82,7 @@ type testAttester struct {
 	evidence            []byte
 }
 
-func (t *testAttester) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
+func (t testAttester) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
 	t.t.Helper()
 
 	assert.Equal(t.t, t.expectedContentType, in.ContentType)
@@ -95,18 +95,18 @@ func (t *testAttester) GetEvidence(in *compositor.EvidenceIn) *compositor.Eviden
 	}
 }
 
-func (t *testAttester) GetOptions() *compositor.OptionsOut {
+func (t testAttester) GetOptions() *compositor.OptionsOut {
 	return &compositor.OptionsOut{Status: &compositor.Status{Result: true}}
 }
 
-func (t *testAttester) GetSubAttesterID() *compositor.SubAttesterIDOut {
+func (t testAttester) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return &compositor.SubAttesterIDOut{
 		Status:        &compositor.Status{Result: true},
 		SubAttesterID: &compositor.SubAttesterID{Name: "test-attester", Version: "1.0.0"},
 	}
 }
 
-func (t *testAttester) GetSupportedFormats() *compositor.SupportedFormatsOut {
+func (t testAttester) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	return &compositor.SupportedFormatsOut{
 		Status:  &compositor.Status{Result: true},
 		Formats: t.formats,
