@@ -64,7 +64,7 @@ func defaultCollectorFactory() (evidenceCollector, error) {
 // resources open until evidence collection is requested. The plugin interface
 // has no initialization hook, so GetSupportedFormats reports this probe's result
 // and does not advertise a format that the host cannot produce.
-func (p *Plugin) initialize() error {
+func (p Plugin) initialize() error {
 	collector, err := p.newCollector()
 	if err != nil {
 		return err
@@ -82,14 +82,14 @@ func getEvidenceError(e error) *compositor.EvidenceOut {
 	}
 }
 
-func (p *Plugin) GetOptions() *compositor.OptionsOut {
+func (p Plugin) GetOptions() *compositor.OptionsOut {
 	return &compositor.OptionsOut{
 		Options: []*compositor.Option{},
 		Status:  statusSucceeded,
 	}
 }
 
-func (p *Plugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
+func (p Plugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,
 		Status:        statusSucceeded,
@@ -112,7 +112,7 @@ func (p Plugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	}
 }
 
-func (p *Plugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
+func (p Plugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
 	if uint32(len(in.Nonce)) != nonceSize {
 		errMsg := fmt.Errorf(
 			"nonce size of the NVIDIA GPU attester should be %d, got %d",
