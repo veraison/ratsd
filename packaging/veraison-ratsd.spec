@@ -18,7 +18,7 @@ BuildRequires:  golang >= 1.25
 BuildRequires:  make
 
 %description
-RATSd is a conceptual message collection daemon for the Veraison project.
+RATSd is an evidence collection daemon for the Veraison project.
 
 %prep
 %autosetup
