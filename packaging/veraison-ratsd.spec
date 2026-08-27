@@ -8,7 +8,7 @@
 Name:           veraison-ratsd
 Version:        %{version}
 Release:        %{release}%{?dist}
-Summary:        Veraison RATS conceptual message collection daemon
+Summary:        Veraison RATS evidence collection daemon
 License:        Apache-2.0
 URL:            https://github.com/veraison/ratsd
 Source0:        %{name}-%{version}.tar.gz
