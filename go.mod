@@ -15,8 +15,8 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veraison/cmw v0.3.0
-	github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53
-	github.com/veraison/go-cose v1.3.0
+	github.com/veraison/ratsd/ratsd-token v1.0.0
+	github.com/veraison/ratsd/ratsd-token/v2 v2.0.0
 	github.com/veraison/services v0.0.2501
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.55.0
@@ -78,6 +78,8 @@ require (
 	github.com/subosito/gotenv v1.4.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
+	github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53 // indirect
+	github.com/veraison/go-cose v1.3.0 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
@@ -97,3 +99,7 @@ require (
 )
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+
+replace github.com/veraison/ratsd/ratsd-token => ./ratsd-token
+
+replace github.com/veraison/ratsd/ratsd-token/v2 => ./ratsd-token/v2

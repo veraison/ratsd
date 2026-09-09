@@ -23,7 +23,7 @@ import (
 	"github.com/veraison/ratsd/attesters/tsm"
 	"github.com/veraison/ratsd/proto/compositor"
 	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
-	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token-v2"
+	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token/v2"
 	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
