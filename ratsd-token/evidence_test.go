@@ -34,12 +34,19 @@ func validEvidence() *Evidence {
 }
 
 func makeLegacyCMWForTest() (*cmw.CMW, string) {
-	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	collection, err := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	if err != nil {
+		panic(err)
+	}
+
 	if collection == nil {
 		panic("failed to create legacy CMW collection")
 	}
 
-	node := cmw.NewMonad("application/octet-stream", []byte{0x01, 0x02, 0x03})
+	node, err := cmw.NewMonad("application/octet-stream", []byte{0x01, 0x02, 0x03})
+	if err != nil {
+		panic(err)
+	}
 	if err := collection.AddCollectionItem("mock-tsm", node); err != nil {
 		panic(err)
 	}
