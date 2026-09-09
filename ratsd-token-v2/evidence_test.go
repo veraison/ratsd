@@ -50,6 +50,41 @@ func validEvidence() *Evidence {
 	return evidence
 }
 
+func mustCMWCollection(t testing.TB, collectionType string) *cmw.CMW {
+	t.Helper()
+	collection, err := cmw.NewCollection(collectionType)
+	require.NoError(t, err)
+	return collection
+}
+
+func mustCMWMonad(t testing.TB, mediaType string, value []byte, indicators ...cmw.Indicator) *cmw.CMW {
+	t.Helper()
+	monad, err := cmw.NewMonad(mediaType, value, indicators...)
+	require.NoError(t, err)
+	return monad
+}
+
+func mustMonadType(t testing.TB, monad *cmw.CMW) string {
+	t.Helper()
+	mediaType, err := monad.GetMonadType()
+	require.NoError(t, err)
+	return mediaType
+}
+
+func mustMonadValue(t testing.TB, monad *cmw.CMW) []byte {
+	t.Helper()
+	value, err := monad.GetMonadValue()
+	require.NoError(t, err)
+	return value
+}
+
+func mustMonadIndicator(t testing.TB, monad *cmw.CMW) cmw.Indicator {
+	t.Helper()
+	indicator, err := monad.GetMonadIndicator()
+	require.NoError(t, err)
+	return indicator
+}
+
 func assertEvidenceEquivalent(t *testing.T, expected, actual *Evidence) {
 	t.Helper()
 
@@ -241,11 +276,11 @@ func TestClaimsSetKeyandNonceSzFail(t *testing.T) {
 }
 
 func TestEvidenceSetCollectionCopiesCMWCollection(t *testing.T) {
-	collection := cmw.NewCollection(CMWCollectionType)
+	collection := mustCMWCollection(t, CMWCollectionType)
 	require.NotNil(t, collection)
 	require.NoError(t, collection.AddCollectionItem(
 		"mock-tsm",
-		cmw.NewMonad("application/octet-stream", []byte{0x01, 0x02}, cmw.Evidence),
+		mustCMWMonad(t, "application/octet-stream", []byte{0x01, 0x02}, cmw.Evidence),
 	))
 
 	evidence := validEvidence()
@@ -253,7 +288,7 @@ func TestEvidenceSetCollectionCopiesCMWCollection(t *testing.T) {
 
 	require.NoError(t, collection.AddCollectionItem(
 		"other",
-		cmw.NewMonad("application/octet-stream", []byte{0x03}),
+		mustCMWMonad(t, "application/octet-stream", []byte{0x03}),
 	))
 
 	stored, err := evidence.GetCollection()
@@ -263,9 +298,9 @@ func TestEvidenceSetCollectionCopiesCMWCollection(t *testing.T) {
 
 	record, err := stored.GetCollectionItem("mock-tsm")
 	require.NoError(t, err)
-	assert.Equal(t, "application/octet-stream", record.GetMonadType())
-	assert.Equal(t, []byte{0x01, 0x02}, record.GetMonadValue())
-	assert.Equal(t, cmw.Indicator(cmw.Evidence), record.GetMonadIndicator())
+	assert.Equal(t, "application/octet-stream", mustMonadType(t, record))
+	assert.Equal(t, []byte{0x01, 0x02}, mustMonadValue(t, record))
+	assert.Equal(t, cmw.Indicator(cmw.Evidence), mustMonadIndicator(t, record))
 }
 
 func TestEvidenceSetTokenStoresCMWMonad(t *testing.T) {
@@ -277,9 +312,9 @@ func TestEvidenceSetTokenStoresCMWMonad(t *testing.T) {
 
 	record, err := evidence.Collection.GetCollectionItem("mock-tsm")
 	require.NoError(t, err)
-	assert.Equal(t, "application/octet-stream", record.GetMonadType())
-	assert.Equal(t, []byte{0x01, 0x02}, record.GetMonadValue())
-	assert.Equal(t, cmw.Indicator(cmw.Evidence), record.GetMonadIndicator())
+	assert.Equal(t, "application/octet-stream", mustMonadType(t, record))
+	assert.Equal(t, []byte{0x01, 0x02}, mustMonadValue(t, record))
+	assert.Equal(t, cmw.Indicator(cmw.Evidence), mustMonadIndicator(t, record))
 }
 
 func TestEvidenceSetTokenFail(t *testing.T) {
@@ -291,20 +326,20 @@ func TestEvidenceSetTokenFail(t *testing.T) {
 	)
 	assert.EqualError(t,
 		evidence.SetToken("mock-tsm", "", []byte{0x01}),
-		`validation failed: invalid CMW record at key "mock-tsm": missing mandatory CMW record type`,
+		`creating CMW record at key "mock-tsm": bad media type: mime: no media type`,
 	)
 	assert.EqualError(t,
 		evidence.SetToken("mock-tsm", "application/octet-stream", nil),
-		`validation failed: invalid CMW record at key "mock-tsm": missing mandatory CMW record value`,
+		`creating CMW record at key "mock-tsm": empty value`,
 	)
 }
 
 func TestEvidenceSetCollectionFailReservedKey(t *testing.T) {
-	collection := cmw.NewCollection(CMWCollectionType)
+	collection := mustCMWCollection(t, CMWCollectionType)
 	require.NotNil(t, collection)
 	require.NoError(t, collection.AddCollectionItem(
 		"__ratsd",
-		cmw.NewMonad("application/octet-stream", []byte{0x01}),
+		mustCMWMonad(t, "application/octet-stream", []byte{0x01}),
 	))
 
 	evidence := validEvidence()
@@ -388,7 +423,7 @@ func TestEvidenceValidFailNonceAdjustMapWithoutFunction(t *testing.T) {
 
 func TestEvidenceValidFailNoCollectionRecords(t *testing.T) {
 	evidence := validEvidence()
-	emptyCollection := cmw.NewCollection(CMWCollectionType)
+	emptyCollection := mustCMWCollection(t, CMWCollectionType)
 	require.NotNil(t, emptyCollection)
 	evidence.Collection = *emptyCollection
 
@@ -527,8 +562,8 @@ func TestEvidenceCBORShape(t *testing.T) {
 
 	var tsmRecord cmw.CMW
 	require.NoError(t, tsmRecord.UnmarshalCBOR(payload["configfs-tsm"]))
-	assert.Equal(t, "application/vnd.veraison.tsm-report+cbor", tsmRecord.GetMonadType())
-	assert.Equal(t, cmw.Indicator(cmw.Evidence), tsmRecord.GetMonadIndicator())
+	assert.Equal(t, "application/vnd.veraison.tsm-report+cbor", mustMonadType(t, &tsmRecord))
+	assert.Equal(t, cmw.Indicator(cmw.Evidence), mustMonadIndicator(t, &tsmRecord))
 
 	var signature []byte
 	require.NoError(t, decMode.Unmarshal(coseItems[3], &signature))

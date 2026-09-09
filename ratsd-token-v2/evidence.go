@@ -59,9 +59,9 @@ type Evidence struct {
 
 // NewEvidence returns an Evidence with the RATSD v2 EAT profile preset.
 func NewEvidence() *Evidence {
-	collection := cmw.NewCollection(CMWCollectionType)
-	if collection == nil {
-		panic(fmt.Sprintf("invalid RATSD CMW collection type constant: %s", CMWCollectionType))
+	collection, err := cmw.NewCollection(CMWCollectionType)
+	if err != nil {
+		panic(fmt.Sprintf("invalid RATSD CMW collection type constant: %s: %v", CMWCollectionType, err))
 	}
 
 	return &Evidence{
@@ -153,7 +153,10 @@ func (e *Evidence) SetToken(key string, mediaType string, token []byte, indicato
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	record := cmw.NewMonad(mediaType, cloneBytes(token), indicators...)
+	record, err := cmw.NewMonad(mediaType, cloneBytes(token), indicators...)
+	if err != nil {
+		return fmt.Errorf("creating CMW record at key %q: %w", key, err)
+	}
 	if err := validateCMWRecord(key, *record); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}
@@ -625,7 +628,12 @@ func marshalPayload(claims Claims, collection cmw.CMW) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := payload.AddCollectionItem(ratsdClaimsKey, cmw.NewMonad(ClaimsMediaType, encodedClaims)); err != nil {
+	claimsRecord, err := cmw.NewMonad(ClaimsMediaType, encodedClaims)
+	if err != nil {
+		return nil, fmt.Errorf(`creating CMW collection field "__ratsd": %w`, err)
+	}
+
+	if err := payload.AddCollectionItem(ratsdClaimsKey, claimsRecord); err != nil {
 		return nil, fmt.Errorf(`adding CMW collection field "__ratsd": %w`, err)
 	}
 
@@ -656,9 +664,9 @@ func unmarshalPayload(data []byte) (Claims, cmw.CMW, error) {
 		return Claims{}, cmw.CMW{}, err
 	}
 
-	collection := cmw.NewCollection(CMWCollectionType)
-	if collection == nil {
-		return Claims{}, cmw.CMW{}, fmt.Errorf("invalid RATSD CMW collection type constant: %s", CMWCollectionType)
+	collection, err := cmw.NewCollection(CMWCollectionType)
+	if err != nil {
+		return Claims{}, cmw.CMW{}, fmt.Errorf("invalid RATSD CMW collection type constant: %s: %w", CMWCollectionType, err)
 	}
 
 	meta, err := payload.GetCollectionMeta()
@@ -707,12 +715,20 @@ func unmarshalClaimsRecord(record cmw.CMW) (Claims, error) {
 		return Claims{}, fmt.Errorf(`invalid CMW collection field "__ratsd": want CMW record, got %s`, record.GetKind())
 	}
 
-	if mediaType := record.GetMonadType(); mediaType != ClaimsMediaType {
+	mediaType, err := record.GetMonadType()
+	if err != nil {
+		return Claims{}, fmt.Errorf(`invalid CMW collection field "__ratsd" type: %w`, err)
+	}
+	if mediaType != ClaimsMediaType {
 		return Claims{}, fmt.Errorf(`invalid CMW collection field "__ratsd" type: expected %q`, ClaimsMediaType)
 	}
 
 	var claims Claims
-	if err := claims.UnmarshalCBOR(record.GetMonadValue()); err != nil {
+	claimsValue, err := record.GetMonadValue()
+	if err != nil {
+		return Claims{}, fmt.Errorf(`invalid CMW collection field "__ratsd" value: %w`, err)
+	}
+	if err := claims.UnmarshalCBOR(claimsValue); err != nil {
 		return Claims{}, fmt.Errorf(`invalid CMW collection field "__ratsd" value: %w`, err)
 	}
 
@@ -796,11 +812,19 @@ func validateCMWRecord(key string, record cmw.CMW) error {
 		return fmt.Errorf("invalid CMW record at key %q: want CBOR record, got %s", key, record.GetFormat())
 	}
 
-	if record.GetMonadType() == "" {
+	mediaType, err := record.GetMonadType()
+	if err != nil {
+		return fmt.Errorf("invalid CMW record at key %q type: %w", key, err)
+	}
+	if mediaType == "" {
 		return fmt.Errorf("invalid CMW record at key %q: missing mandatory CMW record type", key)
 	}
 
-	if len(record.GetMonadValue()) == 0 {
+	value, err := record.GetMonadValue()
+	if err != nil {
+		return fmt.Errorf("invalid CMW record at key %q value: %w", key, err)
+	}
+	if len(value) == 0 {
 		return fmt.Errorf("invalid CMW record at key %q: %w", key, errMissingCMWRecordValue)
 	}
 

@@ -8,9 +8,24 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/veraison/cmw"
 	"github.com/veraison/eat"
 )
+
+func mustCMWCollection(t testing.TB, collectionType string) *cmw.CMW {
+	t.Helper()
+	collection, err := cmw.NewCollection(collectionType)
+	require.NoError(t, err)
+	return collection
+}
+
+func mustCMWMonad(t testing.TB, mediaType string, value []byte, indicators ...cmw.Indicator) *cmw.CMW {
+	t.Helper()
+	monad, err := cmw.NewMonad(mediaType, value, indicators...)
+	require.NoError(t, err)
+	return monad
+}
 
 func validEvidence() *Evidence {
 	profile, err := eat.NewProfile(LegacyProfile)
@@ -34,12 +49,15 @@ func validEvidence() *Evidence {
 }
 
 func makeLegacyCMWForTest() (*cmw.CMW, string) {
-	collection := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
-	if collection == nil {
-		panic("failed to create legacy CMW collection")
+	collection, err := cmw.NewCollection("tag:github.com,2025:veraison/ratsd/cmw")
+	if err != nil {
+		panic(err)
 	}
 
-	node := cmw.NewMonad("application/octet-stream", []byte{0x01, 0x02, 0x03})
+	node, err := cmw.NewMonad("application/octet-stream", []byte{0x01, 0x02, 0x03})
+	if err != nil {
+		panic(err)
+	}
 	if err := collection.AddCollectionItem("mock-tsm", node); err != nil {
 		panic(err)
 	}
