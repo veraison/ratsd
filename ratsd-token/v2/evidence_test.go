@@ -326,11 +326,11 @@ func TestEvidenceSetTokenFail(t *testing.T) {
 	)
 	assert.EqualError(t,
 		evidence.SetToken("mock-tsm", "", []byte{0x01}),
-		`creating CMW record at key "mock-tsm": bad media type: mime: no media type`,
+		`failed to create CMW record for media type "": bad media type: mime: no media type`,
 	)
 	assert.EqualError(t,
 		evidence.SetToken("mock-tsm", "application/octet-stream", nil),
-		`creating CMW record at key "mock-tsm": empty value`,
+		`failed to create CMW record for media type "application/octet-stream": empty value`,
 	)
 }
 

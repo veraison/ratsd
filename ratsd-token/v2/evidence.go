@@ -61,7 +61,7 @@ type Evidence struct {
 func NewEvidence() *Evidence {
 	collection, err := cmw.NewCollection(CMWCollectionType)
 	if err != nil {
-		panic(fmt.Sprintf("invalid RATSD CMW collection type constant: %s: %v", CMWCollectionType, err))
+		panic(fmt.Errorf("failed to create RATSD CMW collection: %w", err))
 	}
 
 	return &Evidence{
@@ -155,7 +155,7 @@ func (e *Evidence) SetToken(key string, mediaType string, token []byte, indicato
 
 	record, err := cmw.NewMonad(mediaType, cloneBytes(token), indicators...)
 	if err != nil {
-		return fmt.Errorf("creating CMW record at key %q: %w", key, err)
+		return fmt.Errorf("failed to create CMW record for media type %q: %w", mediaType, err)
 	}
 	if err := validateCMWRecord(key, *record); err != nil {
 		return fmt.Errorf("validation failed: %w", err)
@@ -630,7 +630,7 @@ func marshalPayload(claims Claims, collection cmw.CMW) ([]byte, error) {
 
 	claimsRecord, err := cmw.NewMonad(ClaimsMediaType, encodedClaims)
 	if err != nil {
-		return nil, fmt.Errorf(`creating CMW collection field "__ratsd": %w`, err)
+		return nil, fmt.Errorf("failed to create RATSD claims CMW record: %w", err)
 	}
 
 	if err := payload.AddCollectionItem(ratsdClaimsKey, claimsRecord); err != nil {
@@ -816,7 +816,7 @@ func validateCMWRecord(key string, record cmw.CMW) error {
 	if err != nil {
 		return fmt.Errorf("invalid CMW record at key %q type: %w", key, err)
 	}
-	if mediaType == "" {
+	if len(mediaType) == 0 {
 		return fmt.Errorf("invalid CMW record at key %q: missing mandatory CMW record type", key)
 	}
 
