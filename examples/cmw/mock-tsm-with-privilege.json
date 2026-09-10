@@ -1,0 +1,12 @@
+{
+  "__cmwc_t": "tag:github.com,2025:veraison/ratsd/cmw",
+  "mock-tsm": [
+    "application/vnd.veraison.configfs-tsm+json",
+    {
+      "auxblob": "bW9jay10c20tYXV4LWRhdGE=",
+      "outblob": "cHJpdmlsZWdlLWxldmVsLXRocmVlLW1vY2stdHNtLWV4YW1wbGUtZGF0YQ==",
+      "provider": "secure-enclave",
+      "privilege_level": "3"
+    }
+  ]
+}
