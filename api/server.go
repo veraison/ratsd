@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package api
 
@@ -165,14 +165,14 @@ func NewServer(logger *zap.SugaredLogger, manager plugin.IManager, options strin
 	}
 }
 
-func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProblem) {
+func (s Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProblem) {
 	s.logger.Error(prob.Detail)
 	w.Header().Set("Content-Type", problems.ProblemMediaType)
 	w.WriteHeader(prob.ProblemStatus())
 	json.NewEncoder(w).Encode(prob)
 }
 
-func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
+func (s Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
 	// Check if content type matches the expectation
 	ct := r.Header.Get("Content-Type")
 	if ct != ApplicationvndVeraisonCharesJson {
@@ -500,7 +500,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	w.Write(response)
 }
 
-func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
+func (s Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
 	resp := []SubAttester{}
 
 	pl := s.manager.GetPluginList()

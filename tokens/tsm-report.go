@@ -1,3 +1,5 @@
+// Copyright 2026 Contributors to the Veraison project.
+// SPDX-License-Identifier: Apache-2.0
 package tokens
 
 import (
@@ -52,7 +54,7 @@ type TSMReport struct {
 }
 
 // Valid checks if the TSMReport is populated correctly
-func (t *TSMReport) Valid() error {
+func (t TSMReport) Valid() error {
 	if len(t.OutBlob) == 0 {
 		return errors.New(`missing mandatory field "outblob"`)
 	}
@@ -69,7 +71,7 @@ func (t *TSMReport) Valid() error {
 }
 
 // ToJSON encodes TSMReport as JSON
-func (t *TSMReport) ToJSON() ([]byte, error) {
+func (t TSMReport) ToJSON() ([]byte, error) {
 	if err := t.Valid(); err != nil {
 		return nil, fmt.Errorf("JSON encoding failed: %w", err)
 	}
@@ -91,7 +93,7 @@ func (t *TSMReport) FromJSON(data []byte) error {
 }
 
 // ToCBOR encodes TSMReport as CBOR
-func (t *TSMReport) ToCBOR() ([]byte, error) {
+func (t TSMReport) ToCBOR() ([]byte, error) {
 	if err := t.Valid(); err != nil {
 		return nil, fmt.Errorf("CBOR encoding failed: %w", err)
 	}

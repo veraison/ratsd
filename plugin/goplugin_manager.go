@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package plugin
 
@@ -53,11 +53,11 @@ func (o *GoPluginManager) Close() error {
 	return nil
 }
 
-func (o *GoPluginManager) LookupByName(name string) (IPluggable, error) {
+func (o GoPluginManager) LookupByName(name string) (IPluggable, error) {
 	return GetGoPluginHandleByNameUsing(o.loader, name)
 }
 
-func (o *GoPluginManager) GetPluginList() []string {
+func (o GoPluginManager) GetPluginList() []string {
 	var registeredPlugin []string
 
 	for name, _ := range o.loader.loadedByName {

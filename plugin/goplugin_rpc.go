@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package plugin
 
@@ -16,19 +16,19 @@ type GRPCServer struct {
 	Impl IPluggable
 }
 
-func (s *GRPCServer) GetSubAttesterID(ctx context.Context, e *emptypb.Empty) (*compositor.SubAttesterIDOut, error) {
+func (s GRPCServer) GetSubAttesterID(ctx context.Context, e *emptypb.Empty) (*compositor.SubAttesterIDOut, error) {
 	return s.Impl.GetSubAttesterID(), nil
 }
 
-func (s *GRPCServer) GetSupportedFormats(ctx context.Context, e *emptypb.Empty) (*compositor.SupportedFormatsOut, error) {
+func (s GRPCServer) GetSupportedFormats(ctx context.Context, e *emptypb.Empty) (*compositor.SupportedFormatsOut, error) {
 	return s.Impl.GetSupportedFormats(), nil
 }
 
-func (s *GRPCServer) GetEvidence(ctx context.Context, in *compositor.EvidenceIn) (*compositor.EvidenceOut, error) {
+func (s GRPCServer) GetEvidence(ctx context.Context, in *compositor.EvidenceIn) (*compositor.EvidenceOut, error) {
 	return s.Impl.GetEvidence(in), nil
 }
 
-func (s *GRPCServer) GetOptions(ctx context.Context, e *emptypb.Empty) (*compositor.OptionsOut, error) {
+func (s GRPCServer) GetOptions(ctx context.Context, e *emptypb.Empty) (*compositor.OptionsOut, error) {
 	return s.Impl.GetOptions(), nil
 }
 
@@ -36,7 +36,7 @@ type GRPCClient struct {
 	client compositor.CompositorClient
 }
 
-func (c *GRPCClient) GetSubAttesterID() *compositor.SubAttesterIDOut {
+func (c GRPCClient) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	resp, err := c.client.GetSubAttesterID(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		return &compositor.SubAttesterIDOut{
@@ -47,7 +47,7 @@ func (c *GRPCClient) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return resp
 }
 
-func (c *GRPCClient) GetSupportedFormats() *compositor.SupportedFormatsOut {
+func (c GRPCClient) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	resp, err := c.client.GetSupportedFormats(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		return &compositor.SupportedFormatsOut{
@@ -58,7 +58,7 @@ func (c *GRPCClient) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	return resp
 }
 
-func (c *GRPCClient) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
+func (c GRPCClient) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
 	resp, err := c.client.GetEvidence(context.Background(), in)
 	if err != nil {
 		return &compositor.EvidenceOut{
@@ -69,7 +69,7 @@ func (c *GRPCClient) GetEvidence(in *compositor.EvidenceIn) *compositor.Evidence
 	return resp
 }
 
-func (c *GRPCClient) GetOptions() *compositor.OptionsOut {
+func (c GRPCClient) GetOptions() *compositor.OptionsOut {
 	resp, err := c.client.GetOptions(context.Background(), &emptypb.Empty{})
 	if err != nil {
 		return &compositor.OptionsOut{

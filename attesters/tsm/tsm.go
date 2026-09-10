@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package tsm
 
@@ -50,7 +50,7 @@ func getEvidenceError(e error, statusCode uint32) *compositor.EvidenceOut {
 	}
 }
 
-func (t *TSMPlugin) GetOptions() *compositor.OptionsOut {
+func (t TSMPlugin) GetOptions() *compositor.OptionsOut {
 	options := []*compositor.Option{
 		&compositor.Option{Name: "privilege_level", Type: "string"},
 	}
@@ -61,14 +61,14 @@ func (t *TSMPlugin) GetOptions() *compositor.OptionsOut {
 	}
 }
 
-func (t *TSMPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
+func (t TSMPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,
 		Status:        statusSucceeded,
 	}
 }
 
-func (t *TSMPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
+func (t TSMPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	if _, err := linuxtsm.MakeClient(); err != nil {
 		return &compositor.SupportedFormatsOut{
 			Status: &compositor.Status{
@@ -84,7 +84,7 @@ func (t *TSMPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	}
 }
 
-func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
+func (t TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
 	if uint32(len(in.Nonce)) != tsmNonceSize {
 		errMsg := fmt.Errorf(
 			"nonce size of the TSM attester should be %d, got %d",
