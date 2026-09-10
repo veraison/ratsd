@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package api
 
@@ -23,10 +23,31 @@ import (
 	"github.com/veraison/ratsd/attesters/tsm"
 	"github.com/veraison/ratsd/proto/compositor"
 	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
-	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token-v2"
+	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token/v2"
 	"github.com/veraison/ratsd/tokens"
 	"github.com/veraison/services/log"
 )
+
+func mustMonadType(t testing.TB, monad *cmw.CMW) string {
+	t.Helper()
+	mediaType, err := monad.GetMonadType()
+	require.NoError(t, err)
+	return mediaType
+}
+
+func mustMonadValue(t testing.TB, monad *cmw.CMW) []byte {
+	t.Helper()
+	value, err := monad.GetMonadValue()
+	require.NoError(t, err)
+	return value
+}
+
+func mustMonadIndicator(t testing.TB, monad *cmw.CMW) cmw.Indicator {
+	t.Helper()
+	indicator, err := monad.GetMonadIndicator()
+	require.NoError(t, err)
+	return indicator
+}
 
 const (
 	jsonType   = "application/json"
@@ -435,10 +456,10 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			c, err := collection.GetCollectionItem("mock-tsm")
 			assert.NoError(t, err)
 			assert.Equal(t, cmw.KindMonad, c.GetKind())
-			assert.Equal(t, c.GetMonadType(), tokens.TSMReportMediaTypeJSON)
+			assert.Equal(t, mustMonadType(t, c), tokens.TSMReportMediaTypeJSON)
 
 			tsmout := &tokens.TSMReport{}
-			tsmout.FromJSON(c.GetMonadValue())
+			tsmout.FromJSON(mustMonadValue(t, c))
 			assert.Equal(t, "fake\n", tsmout.Provider)
 
 			assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
@@ -500,11 +521,11 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 	c, err := collection.GetCollectionItem("mock-tsm")
 	require.NoError(t, err)
 	assert.Equal(t, cmw.KindMonad, c.GetKind())
-	assert.Equal(t, tokens.TSMReportMediaTypeJSON, c.GetMonadType())
-	assert.Equal(t, cmw.Indicator(cmw.Evidence), c.GetMonadIndicator())
+	assert.Equal(t, tokens.TSMReportMediaTypeJSON, mustMonadType(t, c))
+	assert.Equal(t, cmw.Indicator(cmw.Evidence), mustMonadIndicator(t, c))
 
 	tsmout := &tokens.TSMReport{}
-	tsmout.FromJSON(c.GetMonadValue())
+	tsmout.FromJSON(mustMonadValue(t, c))
 	assert.Equal(t, "fake\n", tsmout.Provider)
 	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
@@ -563,8 +584,8 @@ func TestRatsdChares_adjustsNonceToSelectedFormatSize(t *testing.T) {
 	c, err := collection.GetCollectionItem(attesterName)
 	assert.NoError(t, err)
 	assert.Equal(t, cmw.KindMonad, c.GetKind())
-	assert.Equal(t, selectedCt, c.GetMonadType())
-	assert.Equal(t, []byte("evidence"), c.GetMonadValue())
+	assert.Equal(t, selectedCt, mustMonadType(t, c))
+	assert.Equal(t, []byte("evidence"), mustMonadValue(t, c))
 }
 
 func TestRatsdChares_valid_request_selected_attesters(t *testing.T) {

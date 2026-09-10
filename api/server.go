@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package api
 
@@ -17,7 +17,7 @@ import (
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
 	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
-	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token-v2"
+	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token/v2"
 	"go.uber.org/zap"
 )
 
@@ -306,7 +306,11 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 
 	var collection *cmw.CMW
 	if resp.format == charesResponseLegacy {
-		collection = cmw.NewCollection(legacyCMWCollectionType)
+		collection, err = cmw.NewCollection(legacyCMWCollectionType)
+		if err != nil {
+			s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, err.Error()))
+			return
+		}
 	}
 	pl := s.manager.GetPluginList()
 	if len(pl) == 0 {
@@ -442,8 +446,17 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 				return false
 			}
 		} else {
-			c := cmw.NewMonad(in.ContentType, out.Evidence)
-			collection.AddCollectionItem(pn, c)
+			c, err := cmw.NewMonad(in.ContentType, out.Evidence)
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to create evidence from %s: %s", pn, err.Error())
+				s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, errMsg))
+				return false
+			}
+			if err := collection.AddCollectionItem(pn, c); err != nil {
+				errMsg := fmt.Sprintf("failed to add evidence from %s: %s", pn, err.Error())
+				s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, errMsg))
+				return false
+			}
 		}
 		return true
 	}
