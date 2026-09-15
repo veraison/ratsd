@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package mocktsm
 
@@ -49,7 +49,7 @@ func getEvidenceError(e error, statusCode uint32) *compositor.EvidenceOut {
 	}
 }
 
-func (m *MockPlugin) GetOptions() *compositor.OptionsOut {
+func (m MockPlugin) GetOptions() *compositor.OptionsOut {
 	options := []*compositor.Option{
 		&compositor.Option{Name: "privilege_level", Type: "string"},
 	}
@@ -61,21 +61,21 @@ func (m *MockPlugin) GetOptions() *compositor.OptionsOut {
 
 }
 
-func (m *MockPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
+func (m MockPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 	return &compositor.SubAttesterIDOut{
 		SubAttesterID: sid,
 		Status:        statusSucceeded,
 	}
 }
 
-func (m *MockPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
+func (m MockPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	return &compositor.SupportedFormatsOut{
 		Status:  statusSucceeded,
 		Formats: supportedFormats,
 	}
 }
 
-func (m *MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
+func (m MockPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
 	if uint32(len(in.Nonce)) != nonceSize {
 		errMsg := fmt.Errorf(
 			"nonce size of the mockTSM attester should be %d, got %d",
