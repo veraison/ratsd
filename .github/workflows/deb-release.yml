@@ -1,0 +1,89 @@
+name: Build Debian release package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Install Debian packaging dependencies
+        run: sudo apt-get update && sudo apt-get install --yes build-essential dpkg-dev
+
+      - name: Build application and attesters
+        run: GOFLAGS=-buildvcs=false make build
+
+      - name: Build Debian package
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          test -n "$VERSION"
+          PACKAGE_ROOT=package-root
+          ARCHITECTURE=$(dpkg --print-architecture)
+
+          install -d "$PACKAGE_ROOT/DEBIAN" \
+            "$PACKAGE_ROOT/usr/bin" \
+            "$PACKAGE_ROOT/usr/lib/veraison-ratsd/plugins" \
+            "$PACKAGE_ROOT/etc/veraison-ratsd"
+          install -m 0755 ratsd "$PACKAGE_ROOT/usr/bin/ratsd"
+          install -m 0755 attesters/bin/tsm.plugin \
+            "$PACKAGE_ROOT/usr/lib/veraison-ratsd/plugins/tsm.plugin"
+          install -m 0755 attesters/bin/mocktsm.plugin \
+            "$PACKAGE_ROOT/usr/lib/veraison-ratsd/plugins/mocktsm.plugin"
+          install -m 0755 attesters/bin/nvgpu.plugin \
+            "$PACKAGE_ROOT/usr/lib/veraison-ratsd/plugins/nvgpu.plugin"
+          install -m 0644 config.yaml "$PACKAGE_ROOT/etc/veraison-ratsd/config.yaml"
+          sed -i 's|plugin-dir: attesters/bin|plugin-dir: /usr/lib/veraison-ratsd/plugins|' \
+            "$PACKAGE_ROOT/etc/veraison-ratsd/config.yaml"
+
+          cat > "$PACKAGE_ROOT/DEBIAN/control" <<EOF
+          Package: veraison-ratsd
+          Version: $VERSION
+          Section: utils
+          Priority: optional
+          Architecture: $ARCHITECTURE
+          Depends: libc6
+          Maintainer: Veraison Contributors <veraison@lists.trustedfirmware.org>
+          Description: Veraison RATS conceptual message collection daemon
+           RATSd collects conceptual messages for the Veraison project.
+          EOF
+          mkdir -p dist
+          dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" \
+            "dist/veraison-ratsd_${VERSION}_${ARCHITECTURE}.deb"
+
+      - name: Upload Debian package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veraison-ratsd-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  upload-deb:
+    needs: build-deb
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Debian package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: veraison-ratsd-deb
+          path: dist
+
+      - name: Attach Debian package to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/*.deb --clobber
