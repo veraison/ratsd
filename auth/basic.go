@@ -1,9 +1,10 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2025-2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 
 package auth
 
 import (
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,20 @@ import (
 
 type basicAuthUser struct {
 	PasswordHash string `mapstructure:"password"`
+}
+
+const dummyPasswordHash = "$2b$12$jul9hCKZP4cOF0hul0pmguzaJKLPfJ477NglE526eSYHUu9Rqe3UG"
+
+func constantTimeCompareStrings(lhs, rhs string) int {
+	shorter, longer := lhs, rhs
+	if len(lhs) > len(rhs) {
+		shorter, longer = rhs, lhs
+	}
+
+	buf := make([]byte, len(longer))
+	copy(buf, shorter)
+
+	return subtle.ConstantTimeCompare(buf, []byte(longer))
 }
 
 func newBasicAuthUser(m map[string]interface{}) (*basicAuthUser, error) {
@@ -83,27 +98,43 @@ func (o *BasicAuthorizer) GetMiddleware(next http.Handler) http.Handler {
 		func(w http.ResponseWriter, r *http.Request) {
 			o.logger.Debugw("auth basic", "path", r.URL.Path)
 
+			haveProblem := false
+
 			userName, password, hasAuth := r.BasicAuth()
 			if !hasAuth {
-				w.Header().Set("WWW-Authenticate", "Basic realm=veraison")
-				ReportProblem(o.logger, w, "no Basic Authorizaiton given")
-				return
+				o.logger.Warn("request does not contain basic auth")
+				haveProblem = true
 			}
 
-			userInfo, ok := o.users[userName]
-			if !ok {
-				w.Header().Set("WWW-Authenticate", "Basic realm=veraison")
-				ReportProblem(o.logger, w, fmt.Sprintf("no such user: %s", userName))
-				return
+			var userInfo *basicAuthUser
+			found := false
+			for name, info := range o.users {
+				if constantTimeCompareStrings(name, userName) == 1 {
+					userInfo = info
+					found = true
+				}
+			}
+
+			if !found {
+				if !haveProblem {
+					o.logger.Warnw("basic auth: unknown user", "user", userName)
+					haveProblem = true
+				}
+
+				userInfo = &basicAuthUser{PasswordHash: dummyPasswordHash}
 			}
 
 			if err := bcrypt.CompareHashAndPassword(
 				[]byte(userInfo.PasswordHash),
 				[]byte(password),
-			); err != nil {
-				o.logger.Debugf("password check failed: %v", err)
+			); err != nil && !haveProblem {
+				o.logger.Warnf("password check failed: %v", err)
+				haveProblem = true
+			}
+
+			if haveProblem {
 				w.Header().Set("WWW-Authenticate", "Basic realm=veraison")
-				ReportProblem(o.logger, w, "wrong username or password")
+				ReportProblem(o.logger, w, "authorization failed")
 				return
 			}
 
