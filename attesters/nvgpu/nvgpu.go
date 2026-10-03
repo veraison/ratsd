@@ -113,10 +113,10 @@ func (p Plugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 }
 
 func (p Plugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
-	if uint32(len(in.Nonce)) != nonceSize {
+	if len(in.Nonce) != nonceSize {
 		errMsg := fmt.Errorf(
 			"nonce size of the NVIDIA GPU attester should be %d, got %d",
-			nonceSize, uint32(len(in.Nonce)),
+			nonceSize, len(in.Nonce),
 		)
 		return getEvidenceError(errMsg)
 	}

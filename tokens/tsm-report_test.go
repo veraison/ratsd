@@ -3,9 +3,10 @@
 package tokens
 
 import (
-	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var provider = "sev_guest"

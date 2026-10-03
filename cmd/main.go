@@ -4,7 +4,9 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/veraison/ratsd/api"
 	"github.com/veraison/ratsd/auth"
@@ -17,18 +19,23 @@ var (
 	DefaultListenAddr = "localhost:8895"
 )
 
+const (
+	protocolHTTPS     = "https"
+	readHeaderTimeout = 10 * time.Second
+)
+
 type cfg struct {
-	ListenAddr  string `mapstructure:"listen-addr" valid:"dialstring"`
-	Protocol    string `mapstructure:"protocol" valid:"in(http|https)"`
-	Cert        string `mapstructure:"cert" config:"zerodefault"`
-	CertKey     string `mapstructure:"cert-key" config:"zerodefault"`
-	PluginDir   string `mapstructure:"plugin-dir" config:"zerodefault"`
-	ListOptions string `mapstructure:"list-options" valid:"in(all|selected)"`
-	SecureLoader  bool   `mapstructure:"secure-loader" config:"zerodefault"`
+	ListenAddr   string `mapstructure:"listen-addr" valid:"dialstring"`
+	Protocol     string `mapstructure:"protocol" valid:"in(http|https)"`
+	Cert         string `mapstructure:"cert" config:"zerodefault"`
+	CertKey      string `mapstructure:"cert-key" config:"zerodefault"`
+	PluginDir    string `mapstructure:"plugin-dir" config:"zerodefault"`
+	ListOptions  string `mapstructure:"list-options" valid:"in(all|selected)"`
+	SecureLoader bool   `mapstructure:"secure-loader" config:"zerodefault"`
 }
 
 func (o cfg) Validate() error {
-	if o.Protocol == "https" && (o.Cert == "" || o.CertKey == "") {
+	if o.Protocol == protocolHTTPS && (o.Cert == "" || o.CertKey == "") {
 		return errors.New(`both cert and cert-key must be specified when protocol is "https"`)
 	}
 
@@ -36,31 +43,37 @@ func (o cfg) Validate() error {
 }
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	config.CmdLine()
 
 	v, err := config.ReadRawConfig(*config.File, false)
 	if err != nil {
-		log.Fatalf("Could not read config sources: %v", err)
+		return fmt.Errorf("could not read config sources: %w", err)
 	}
 
 	cfg := cfg{
 		ListenAddr: DefaultListenAddr,
-		Protocol:   "https",
+		Protocol:   protocolHTTPS,
 	}
 
 	subs, err := config.GetSubs(v, "ratsd", "*logging", "*auth")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	classifiers := map[string]interface{}{"ratsd": "core"}
 	if err := log.Init(subs["logging"], classifiers); err != nil {
-		log.Fatalf("could not configure logging: %v", err)
+		return fmt.Errorf("could not configure logging: %w", err)
 	}
 
 	authorizer, err := auth.NewAuthorizer(subs["auth"], log.Named("auth"))
 	if err != nil {
-		log.Fatalf("could not init authorizer: %v", err)
+		return fmt.Errorf("could not init authorizer: %w", err)
 	}
 	defer func() {
 		err := authorizer.Close()
@@ -73,21 +86,21 @@ func main() {
 
 	loader := config.NewLoader(&cfg)
 	if err = loader.LoadFromViper(subs["ratsd"]); err != nil {
-		log.Fatalf("Could not load config: %v", err)
+		return fmt.Errorf("could not load config: %w", err)
 	}
 
 	// Load sub-attesters from the path specified in config.yaml
 	pluginLoader, err := plugin.CreateGoPluginLoader(cfg.PluginDir, log.Named("plugin"))
 	if err != nil {
-		log.Fatalf("could not create the plugin loader: %v", err)
+		return fmt.Errorf("could not create the plugin loader: %w", err)
 	}
 	if cfg.SecureLoader {
 		subs, err := config.GetSubs(v, "plugins")
 		if err != nil {
-			log.Fatalf("failed to enable secure loader: %v", err)
+			return fmt.Errorf("failed to enable secure loader: %w", err)
 		}
 		if err := pluginLoader.SetChecksum(subs["plugins"]); err != nil {
-			log.Fatalf("secure loader failed to set plugin checksum: %v", err)
+			return fmt.Errorf("secure loader failed to set plugin checksum: %w", err)
 		}
 	}
 
@@ -95,7 +108,7 @@ func main() {
 		pluginLoader, log.Named("plugin"))
 
 	if err != nil {
-		log.Fatalf("could not create the plugin manager: %v", err)
+		return fmt.Errorf("could not create the plugin manager: %w", err)
 	}
 
 	log.Info("Loaded sub-attesters:", pluginManager.GetPluginList())
@@ -109,15 +122,16 @@ func main() {
 	h := api.HandlerWithOptions(svr, options)
 
 	s := &http.Server{
-		Handler: h,
-		Addr:    cfg.ListenAddr,
+		Handler:           h,
+		Addr:              cfg.ListenAddr,
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
-	if cfg.Protocol == "https" {
+	if cfg.Protocol == protocolHTTPS {
 		log.Infow("initializing ratsd HTTPS service", "address", cfg.ListenAddr)
-		log.Fatal(s.ListenAndServeTLS(cfg.Cert, cfg.CertKey))
-	} else {
-		log.Infow("initializing ratsd HTTP service", "address", cfg.ListenAddr)
-		log.Fatal(s.ListenAndServe())
+		return s.ListenAndServeTLS(cfg.Cert, cfg.CertKey)
 	}
+
+	log.Infow("initializing ratsd HTTP service", "address", cfg.ListenAddr)
+	return s.ListenAndServe()
 }

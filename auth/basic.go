@@ -19,7 +19,9 @@ type basicAuthUser struct {
 	PasswordHash string `mapstructure:"password"`
 }
 
-const dummyPasswordHash = "$2b$12$jul9hCKZP4cOF0hul0pmguzaJKLPfJ477NglE526eSYHUu9Rqe3UG"
+// dummyPasswordHash is not a credential: it is compared against for unknown
+// users so that authentication failures take constant time.
+const dummyPasswordHash = "$2b$12$jul9hCKZP4cOF0hul0pmguzaJKLPfJ477NglE526eSYHUu9Rqe3UG" //nolint:gosec // dummy hash, not credential
 
 func constantTimeCompareStrings(lhs, rhs string) int {
 	shorter, longer := lhs, rhs

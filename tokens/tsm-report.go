@@ -61,7 +61,7 @@ func (t *TSMReport) Valid() error {
 		return errors.New(`missing mandatory field "provider"`)
 	}
 
-	if len(t.ManifestBlob) > 0 && (t.ServiceProvider == nil || len(*t.ServiceProvider) == 0) {
+	if len(t.ManifestBlob) > 0 && (t.ServiceProvider == nil || *t.ServiceProvider == "") {
 		return errors.New(`stray field "manifestblob"`)
 	}
 
