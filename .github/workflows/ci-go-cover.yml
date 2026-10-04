@@ -1,4 +1,4 @@
-name: ci
+name: coverage
 
 on:
   push:
@@ -14,7 +14,8 @@ concurrency:
   cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
 jobs:
-  test:
+  cover:
     uses: veraison/ci/.github/workflows/go.yml@main
     with:
-      jobs: 'test'
+      jobs: 'cover'
+      min-coverage: '44.4'

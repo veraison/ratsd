@@ -21,5 +21,7 @@ func ReportProblem(logger *zap.SugaredLogger, w http.ResponseWriter, detail stri
 
 	w.Header().Set("Content-Type", problems.ProblemMediaType)
 	w.WriteHeader(p.ProblemStatus())
-	json.NewEncoder(w).Encode(p)
+	if err := json.NewEncoder(w).Encode(p); err != nil {
+		logger.Errorf("failed to write problem response: %v", err)
+	}
 }

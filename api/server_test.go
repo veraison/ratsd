@@ -221,7 +221,7 @@ func TestRatsdChares_defaults_to_legacy_response_without_accept(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	w := httptest.NewRecorder()
-	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s"}`, validNonce))
+	rb := strings.NewReader(fmt.Sprintf(`{"nonce": %q}`, validNonce))
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
 	s.RatsdChares(w, r, RatsdCharesParams{})
@@ -292,7 +292,7 @@ func TestRatsdChares_invalid_body(t *testing.T) {
 		"attester-selection": "attester-slection"}`, validNonce),
 			"failed to parse attester selection: json: cannot unmarshal string into" +
 				` Go value of type []string`},
-		{"no attester specified in selected mode", fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
+		{"no attester specified in selected mode", fmt.Sprintf(`{"nonce": %q}`, validNonce),
 			"attester-selection must contain at least one attester"},
 		{"empty attester selection in selected mode",
 			fmt.Sprintf(`{"nonce": "%s",
@@ -354,7 +354,7 @@ func TestRatsdChares_valid_request_no_available_attester(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	w := httptest.NewRecorder()
-	rs := fmt.Sprintf(`{"nonce": "%s"}`, validNonce)
+	rs := fmt.Sprintf(`{"nonce": %q}`, validNonce)
 	rb := strings.NewReader(rs)
 	r, _ := http.NewRequest(http.MethodPost, "/ratsd/chares", rb)
 	r.Header.Add("Content-Type", ApplicationvndVeraisonCharesJson)
@@ -398,7 +398,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 	}{
 		{
 			"no params",
-			fmt.Sprintf(`{"nonce": "%s"}`, validNonce),
+			fmt.Sprintf(`{"nonce": %q}`, validNonce),
 			0,
 		},
 		{
@@ -459,7 +459,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, mustMonadType(t, c), tokens.TSMReportMediaTypeJSON)
 
 			tsmout := &tokens.TSMReport{}
-			tsmout.FromJSON(mustMonadValue(t, c))
+			assert.NoError(t, tsmout.FromJSON(mustMonadValue(t, c)))
 			assert.Equal(t, "fake\n", tsmout.Provider)
 
 			assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
@@ -525,7 +525,7 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 	assert.Equal(t, cmw.Indicator(cmw.Evidence), mustMonadIndicator(t, c))
 
 	tsmout := &tokens.TSMReport{}
-	tsmout.FromJSON(mustMonadValue(t, c))
+	assert.NoError(t, tsmout.FromJSON(mustMonadValue(t, c)))
 	assert.Equal(t, "fake\n", tsmout.Provider)
 	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 

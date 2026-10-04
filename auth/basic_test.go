@@ -46,7 +46,7 @@ func TestBasicAuthorizer_GetMiddleware(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			nextCalled = false
-			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			if test.username != "" {
 				request.SetBasicAuth(test.username, test.password)
 			}

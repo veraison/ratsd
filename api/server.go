@@ -169,7 +169,9 @@ func (s *Server) reportProblem(w http.ResponseWriter, prob *problems.DefaultProb
 	s.logger.Error(prob.Detail)
 	w.Header().Set("Content-Type", problems.ProblemMediaType)
 	w.WriteHeader(prob.ProblemStatus())
-	json.NewEncoder(w).Encode(prob)
+	if err := json.NewEncoder(w).Encode(prob); err != nil {
+		s.logger.Errorf("failed to write problem response: %v", err)
+	}
 }
 
 func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param RatsdCharesParams) {
@@ -177,12 +179,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	ct := r.Header.Get("Content-Type")
 	if ct != ApplicationvndVeraisonCharesJson {
 		errMsg := fmt.Sprintf("wrong content type, expect %s (got %s)", ApplicationvndVeraisonCharesJson, ct)
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
+		p := invalidRequestProblem(errMsg)
 		s.reportProblem(w, p)
 		return
 	}
@@ -197,116 +194,34 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		return
 	}
 
-	payload, _ := io.ReadAll(r.Body)
-	requestFields := make(map[string]json.RawMessage)
-	err = json.Unmarshal(payload, &requestFields)
-	if err != nil {
-		errMsg := "unable to deserialize JSON request body"
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
-		s.reportProblem(w, p)
+	req, prob := parseCharesRequest(r.Body)
+	if prob != nil {
+		s.reportProblem(w, prob)
 		return
 	}
-
-	rawNonce, hasNonce := requestFields["nonce"]
-	if !hasNonce {
-		errMsg := "fail to retrieve nonce from the request"
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
-		s.reportProblem(w, p)
+	if s.options == "selected" && len(req.selectedAttesters) == 0 {
+		s.reportProblem(w, invalidRequestProblem("attester-selection must contain at least one attester"))
 		return
 	}
-
-	var requestNonce string
-	if err := json.Unmarshal(rawNonce, &requestNonce); err != nil || len(requestNonce) < 1 {
-		errMsg := "fail to retrieve nonce from the request"
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
-		s.reportProblem(w, p)
+	if prob := req.decodeNonce(); prob != nil {
+		s.reportProblem(w, prob)
 		return
 	}
-	delete(requestFields, "nonce")
-
-	selectedAttesters := []string{}
-	hasSelection := false
-	if rawSelection, ok := requestFields["attester-selection"]; ok {
-		hasSelection = true
-		if err := json.Unmarshal(rawSelection, &selectedAttesters); err != nil {
-			errMsg := fmt.Sprintf(
-				"failed to parse attester selection: %s", err.Error())
-			p := &problems.DefaultProblem{
-				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-				Title:  string(InvalidRequest),
-				Detail: errMsg,
-				Status: http.StatusBadRequest,
-			}
-			s.reportProblem(w, p)
-			return
-		}
-		delete(requestFields, "attester-selection")
-	}
-
-	if s.options == "selected" && len(selectedAttesters) == 0 {
-		errMsg := "attester-selection must contain at least one attester"
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
-		s.reportProblem(w, p)
-		return
-	}
-
-	nonce, err := base64.RawURLEncoding.DecodeString(requestNonce)
-	if err != nil {
-		errMsg := fmt.Sprintf("fail to decode nonce from the request: %s", err.Error())
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
-		s.reportProblem(w, p)
-		return
-	}
-	s.logger.Info("request nonce: ", requestNonce)
+	nonce := req.nonce
+	options := req.options
+	s.logger.Info("request nonce: ", req.encodedNonce)
 	s.logger.Info("response media type: ", resp.contentType)
 
-	legacyEvidence := ratsdtoken.NewEvidence()
-	v2Evidence := ratsdtokenv2.NewEvidence()
-	if resp.format == charesResponseV2 {
-		err = v2Evidence.Claims.SetNonce(nonce)
-	} else {
-		err = legacyEvidence.Claims.SetNonce(nonce)
-	}
-	if err != nil {
+	evidence := newCharesEvidence(resp.format)
+	if err := evidence.setNonce(nonce); err != nil {
 		errMsg := fmt.Errorf("invalid nonce in the request: %w", err).Error()
-		p := &problems.DefaultProblem{
-			Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-			Title:  string(InvalidRequest),
-			Detail: errMsg,
-			Status: http.StatusBadRequest,
-		}
+		p := invalidRequestProblem(errMsg)
 		s.reportProblem(w, p)
 		return
 	}
 
-	var collection *cmw.CMW
 	if resp.format == charesResponseLegacy {
-		collection, err = cmw.NewCollection(legacyCMWCollectionType)
+		evidence.collection, err = cmw.NewCollection(legacyCMWCollectionType)
 		if err != nil {
 			s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, err.Error()))
 			return
@@ -319,8 +234,6 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		s.reportProblem(w, p)
 		return
 	}
-
-	options := requestFields
 
 	getCMW := func(pn string) bool {
 		attester, err := s.manager.LookupByName(pn)
@@ -341,53 +254,12 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		var selectedFormat *compositor.Format
-		var outputCt string
-		selectedFormat = formatOut.Formats[0]
-		outputCt = selectedFormat.ContentType
-		params, hasOption := options[pn]
-		if !hasOption || string(params) == "null" {
-			params = json.RawMessage{}
-		} else {
-			attesterOptions := make(map[string]string)
-			if err := json.Unmarshal(params, &attesterOptions); err != nil {
-				errMsg := fmt.Sprintf(
-					"failed to parse options for %s: %v", pn, err)
-				p := &problems.DefaultProblem{
-					Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-					Title:  string(InvalidRequest),
-					Detail: errMsg,
-					Status: http.StatusBadRequest,
-				}
-				s.reportProblem(w, p)
-				return false
-			}
-
-			validCt := false
-			if desiredCt, ok := attesterOptions["content-type"]; ok {
-				for _, f := range formatOut.Formats {
-					if f.ContentType == desiredCt {
-						selectedFormat = f
-						outputCt = selectedFormat.ContentType
-						validCt = true
-						break
-					}
-				}
-
-				if !validCt {
-					errMsg := fmt.Sprintf(
-						"%s does not support content type %s", pn, desiredCt)
-					p := &problems.DefaultProblem{
-						Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
-						Title:  string(InvalidRequest),
-						Detail: errMsg,
-						Status: http.StatusBadRequest,
-					}
-					s.reportProblem(w, p)
-					return false
-				}
-			}
+		selectedFormat, params, prob := selectAttesterFormat(pn, formatOut.Formats, options[pn])
+		if prob != nil {
+			s.reportProblem(w, prob)
+			return false
 		}
+		outputCt := selectedFormat.ContentType
 
 		s.logger.Info(pn, " output content type: ", outputCt)
 		attesterNonce, err := adjustNonce(nonce, selectedFormat.NonceSize)
@@ -399,26 +271,8 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		if resp.format == charesResponseV2 {
-			err = v2Evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
-		} else {
-			err = legacyEvidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
-		}
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
-		}
-
-		if resp.format == charesResponseV2 {
-			err = v2Evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
-		} else {
-			err = legacyEvidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
-		}
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		if err := evidence.setAttesterNonceSize(pn, uint(selectedFormat.NonceSize)); err != nil {
+			p := problems.NewDetailedProblem(http.StatusInternalServerError, err.Error())
 			s.reportProblem(w, p)
 			return false
 		}
@@ -438,40 +292,16 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 			return false
 		}
 
-		if resp.format == charesResponseV2 {
-			if err := v2Evidence.SetToken(pn, in.ContentType, out.Evidence, cmw.Evidence); err != nil {
-				errMsg := fmt.Sprintf("failed to add evidence from %s: %s", pn, err.Error())
-				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-				s.reportProblem(w, p)
-				return false
-			}
-		} else {
-			c, err := cmw.NewMonad(in.ContentType, out.Evidence)
-			if err != nil {
-				errMsg := fmt.Sprintf("failed to create evidence from %s: %s", pn, err.Error())
-				s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, errMsg))
-				return false
-			}
-			if err := collection.AddCollectionItem(pn, c); err != nil {
-				errMsg := fmt.Sprintf("failed to add evidence from %s: %s", pn, err.Error())
-				s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, errMsg))
-				return false
-			}
+		if err := evidence.addEvidence(pn, in.ContentType, out.Evidence); err != nil {
+			s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, err.Error()))
+			return false
 		}
 		return true
 	}
 
 	attestersToQuery := pl
-	if hasSelection {
-		seen := make(map[string]struct{}, len(selectedAttesters))
-		attestersToQuery = make([]string, 0, len(selectedAttesters))
-		for _, pn := range selectedAttesters {
-			if _, ok := seen[pn]; ok {
-				continue
-			}
-			seen[pn] = struct{}{}
-			attestersToQuery = append(attestersToQuery, pn)
-		}
+	if req.hasSelection {
+		attestersToQuery = uniqueStrings(req.selectedAttesters)
 	}
 
 	for _, pn := range attestersToQuery {
@@ -480,37 +310,18 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 	}
 
-	var response []byte
-	if resp.format == charesResponseV2 {
-		// Token signing is not configured by the API yet, but COSE_Sign1
-		// serialization requires a non-empty signature field.
-		if err := v2Evidence.SetSignature([]byte{0}); err != nil {
-			errMsg := fmt.Sprintf("failed to set RATSD v2 token signature: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return
-		}
-		response, err = v2Evidence.MarshalCBOR()
-	} else {
-		if err := legacyEvidence.Claims.SetCMW(collection); err != nil {
-			errMsg := fmt.Sprintf("failed to serialize CMW collection: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return
-		}
-
-		response, err = legacyEvidence.MarshalJSON()
-	}
+	response, err := evidence.marshal()
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to serialize RATSD token: %s", err.Error())
-		p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+		p := problems.NewDetailedProblem(http.StatusInternalServerError, err.Error())
 		s.reportProblem(w, p)
 		return
 	}
 
 	w.Header().Set("Content-Type", resp.contentType)
 	w.WriteHeader(http.StatusOK)
-	w.Write(response)
+	if _, err := w.Write(response); err != nil {
+		s.logger.Errorf("failed to write response: %v", err)
+	}
 }
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
@@ -538,5 +349,194 @@ func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", JsonType)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.logger.Errorf("failed to write response: %v", err)
+	}
+}
+
+type charesRequest struct {
+	nonce             []byte
+	encodedNonce      string
+	selectedAttesters []string
+	hasSelection      bool
+	// remaining request fields, keyed by attester name
+	options map[string]json.RawMessage
+}
+
+func invalidRequestProblem(detail string) *problems.DefaultProblem {
+	return &problems.DefaultProblem{
+		Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+		Title:  string(InvalidRequest),
+		Detail: detail,
+		Status: http.StatusBadRequest,
+	}
+}
+
+func parseCharesRequest(body io.Reader) (*charesRequest, *problems.DefaultProblem) {
+	payload, _ := io.ReadAll(body)
+	requestFields := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(payload, &requestFields); err != nil {
+		return nil, invalidRequestProblem("unable to deserialize JSON request body")
+	}
+
+	rawNonce, hasNonce := requestFields["nonce"]
+	if !hasNonce {
+		return nil, invalidRequestProblem("fail to retrieve nonce from the request")
+	}
+
+	req := &charesRequest{selectedAttesters: []string{}}
+	if err := json.Unmarshal(rawNonce, &req.encodedNonce); err != nil || req.encodedNonce == "" {
+		return nil, invalidRequestProblem("fail to retrieve nonce from the request")
+	}
+	delete(requestFields, "nonce")
+
+	if rawSelection, ok := requestFields["attester-selection"]; ok {
+		req.hasSelection = true
+		if err := json.Unmarshal(rawSelection, &req.selectedAttesters); err != nil {
+			return nil, invalidRequestProblem(fmt.Sprintf(
+				"failed to parse attester selection: %s", err.Error()))
+		}
+		delete(requestFields, "attester-selection")
+	}
+	req.options = requestFields
+
+	return req, nil
+}
+
+func (r *charesRequest) decodeNonce() *problems.DefaultProblem {
+	nonce, err := base64.RawURLEncoding.DecodeString(r.encodedNonce)
+	if err != nil {
+		return invalidRequestProblem(fmt.Sprintf(
+			"fail to decode nonce from the request: %s", err.Error()))
+	}
+	r.nonce = nonce
+	return nil
+}
+
+func selectAttesterFormat(
+	pn string, formats []*compositor.Format, params json.RawMessage,
+) (*compositor.Format, json.RawMessage, *problems.DefaultProblem) {
+	if params == nil || string(params) == "null" {
+		return formats[0], json.RawMessage{}, nil
+	}
+
+	attesterOptions := make(map[string]string)
+	if err := json.Unmarshal(params, &attesterOptions); err != nil {
+		return nil, nil, invalidRequestProblem(fmt.Sprintf(
+			"failed to parse options for %s: %v", pn, err))
+	}
+
+	desiredCt, ok := attesterOptions["content-type"]
+	if !ok {
+		return formats[0], params, nil
+	}
+
+	for _, f := range formats {
+		if f.ContentType == desiredCt {
+			return f, params, nil
+		}
+	}
+
+	return nil, nil, invalidRequestProblem(fmt.Sprintf(
+		"%s does not support content type %s", pn, desiredCt))
+}
+
+func uniqueStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+type charesEvidence struct {
+	format charesResponseFormat
+	legacy *ratsdtoken.Evidence
+	v2     *ratsdtokenv2.Evidence
+	// only used for legacy tokens
+	collection *cmw.CMW
+}
+
+func newCharesEvidence(format charesResponseFormat) *charesEvidence {
+	return &charesEvidence{
+		format: format,
+		legacy: ratsdtoken.NewEvidence(),
+		v2:     ratsdtokenv2.NewEvidence(),
+	}
+}
+
+func (e *charesEvidence) setNonce(nonce []byte) error {
+	if e.format == charesResponseV2 {
+		return e.v2.Claims.SetNonce(nonce)
+	}
+	return e.legacy.Claims.SetNonce(nonce)
+}
+
+func (e *charesEvidence) setAttesterNonceSize(pn string, size uint) error {
+	var err error
+	if e.format == charesResponseV2 {
+		err = e.v2.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+	} else {
+		err = e.legacy.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to set nonce adjustment function: %w", err)
+	}
+
+	if e.format == charesResponseV2 {
+		err = e.v2.Claims.SetKeyandNonceSz(pn, size)
+	} else {
+		err = e.legacy.Claims.SetKeyandNonceSz(pn, size)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to set nonce adjustment map: %w", err)
+	}
+	return nil
+}
+
+func (e *charesEvidence) addEvidence(pn, contentType string, evidence []byte) error {
+	if e.format == charesResponseV2 {
+		if err := e.v2.SetToken(pn, contentType, evidence, cmw.Evidence); err != nil {
+			return fmt.Errorf("failed to add evidence from %s: %w", pn, err)
+		}
+		return nil
+	}
+
+	c, err := cmw.NewMonad(contentType, evidence)
+	if err != nil {
+		return fmt.Errorf("failed to create evidence from %s: %w", pn, err)
+	}
+	if err := e.collection.AddCollectionItem(pn, c); err != nil {
+		return fmt.Errorf("failed to add evidence from %s: %w", pn, err)
+	}
+	return nil
+}
+
+func (e *charesEvidence) marshal() ([]byte, error) {
+	var (
+		response []byte
+		err      error
+	)
+	if e.format == charesResponseV2 {
+		// Token signing is not configured by the API yet, but COSE_Sign1
+		// serialization requires a non-empty signature field.
+		if err := e.v2.SetSignature([]byte{0}); err != nil {
+			return nil, fmt.Errorf("failed to set RATSD v2 token signature: %w", err)
+		}
+		response, err = e.v2.MarshalCBOR()
+	} else {
+		if err := e.legacy.Claims.SetCMW(e.collection); err != nil {
+			return nil, fmt.Errorf("failed to serialize CMW collection: %w", err)
+		}
+		response, err = e.legacy.MarshalJSON()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize RATSD token: %w", err)
+	}
+	return response, nil
 }

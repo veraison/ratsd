@@ -2,21 +2,25 @@ name: API checks
 
 on:
   push:
+    branches: ["**"]
     paths:
-    - 'docs/api/**'
+      - 'docs/api/**'
+      - '.github/workflows/api.yml'
   pull_request:
     paths:
-    - 'docs/api/**'
+      - 'docs/api/**'
+      - '.github/workflows/api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref_name != github.event.repository.default_branch }}
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Install OpenAPI spec validator
-      run: pip install openapi-spec-validator
-
-    - name: Check RATSD API
-      run: make -C docs/api check
+  openapi:
+    uses: veraison/ci/.github/workflows/openapi.yml@main
+    with:
+      specs: 'docs/api/ratsd.yaml'

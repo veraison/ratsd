@@ -62,8 +62,8 @@ func createPluginContext(
 		}
 
 		secureConfig := &plugin.SecureConfig{
-			Checksum:[]byte(checksum),
-			Hash: sha256.New(),
+			Checksum: checksum,
+			Hash:     sha256.New(),
 		}
 		cfg.SecureConfig = secureConfig
 	}

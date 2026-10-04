@@ -23,8 +23,8 @@ func (o unknownPluginErr) Error() string {
 type GoPluginLoader struct {
 	Location string
 
-	logger       *zap.SugaredLogger
-	loadedByName map[string]*PluginContext
+	logger         *zap.SugaredLogger
+	loadedByName   map[string]*PluginContext
 	pluginChecksum map[string][]byte
 
 	// This gets specified as Plugins when creating a new go-plugin client.

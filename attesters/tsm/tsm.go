@@ -85,90 +85,92 @@ func (t *TSMPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
 }
 
 func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceOut {
-	if uint32(len(in.Nonce)) != tsmNonceSize {
+	if len(in.Nonce) != tsmNonceSize {
 		errMsg := fmt.Errorf(
 			"nonce size of the TSM attester should be %d, got %d",
-			tsmNonceSize, uint32(len(in.Nonce)))
+			tsmNonceSize, len(in.Nonce))
 		return getEvidenceError(errMsg, http.StatusBadRequest)
 	}
 
 	for _, format := range supportedFormats {
-		if in.ContentType == format.ContentType {
-			req := &report.Request{
-				InBlob:     in.Nonce,
-				GetAuxBlob: false,
-			}
+		if in.ContentType != format.ContentType {
+			continue
+		}
 
-			options := make(map[string]string)
-			if len(in.Options) > 0 {
-				if err := json.Unmarshal(in.Options, &options); err != nil {
-					errMsg := fmt.Errorf(
-						"failed to parse %s: %v", in.Options, err)
-					return getEvidenceError(errMsg, http.StatusBadRequest)
-				}
-			}
+		req := &report.Request{
+			InBlob:     in.Nonce,
+			GetAuxBlob: false,
+		}
 
-			if privlevel, ok := options["privilege_level"]; ok {
-				level, err := strconv.Atoi(privlevel)
-				if err != nil || level < 0 {
-					errMsg := fmt.Errorf("privilege_level %s is invalid",
-						privlevel)
-					return getEvidenceError(errMsg, http.StatusBadRequest)
-				}
-				req.Privilege = &report.Privilege{Level: uint(level)}
+		options := make(map[string]string)
+		if len(in.Options) > 0 {
+			if err := json.Unmarshal(in.Options, &options); err != nil {
+				errMsg := fmt.Errorf(
+					"failed to parse %s: %v", in.Options, err)
+				return getEvidenceError(errMsg, http.StatusBadRequest)
 			}
+		}
 
-			client, err := linuxtsm.MakeClient()
-			if err != nil {
-				errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
-				return getEvidenceError(errMsg, http.StatusInternalServerError)
+		if privlevel, ok := options["privilege_level"]; ok {
+			level, err := strconv.Atoi(privlevel)
+			if err != nil || level < 0 {
+				errMsg := fmt.Errorf("privilege_level %s is invalid",
+					privlevel)
+				return getEvidenceError(errMsg, http.StatusBadRequest)
 			}
+			req.Privilege = &report.Privilege{Level: uint(level)}
+		}
 
+		client, err := linuxtsm.MakeClient()
+		if err != nil {
+			errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
+			return getEvidenceError(errMsg, http.StatusInternalServerError)
+		}
+
+		resp, err := report.Get(client, req)
+		if err != nil {
+			errMsg := fmt.Errorf("failed to get TSM report: %v", err)
+			return getEvidenceError(errMsg, http.StatusInternalServerError)
+		}
+
+		out := &tokens.TSMReport{
+			Provider: resp.Provider,
+			OutBlob:  resp.OutBlob,
+			AuxBlob:  resp.AuxBlob,
+		}
+
+		// SEV-SNP stores cert table in auxblob. Get the report one more time to fetch the auxblob
+		// resp.Provider might contain newlines
+		if strings.TrimSpace(resp.Provider) == "sev_guest" {
+			req.GetAuxBlob = true
 			resp, err := report.Get(client, req)
 			if err != nil {
 				errMsg := fmt.Errorf("failed to get TSM report: %v", err)
 				return getEvidenceError(errMsg, http.StatusInternalServerError)
 			}
+			out.AuxBlob = resp.AuxBlob
+		}
 
-			out := &tokens.TSMReport{
-				Provider: resp.Provider,
-				OutBlob:  resp.OutBlob,
-				AuxBlob:  resp.AuxBlob,
-			}
+		var encodeOp func() ([]byte, error)
+		encodeAs := "JSON"
 
-			// SEV-SNP stores cert table in auxblob. Get the report one more time to fetch the auxblob
-			// resp.Provider might contain newlines
-			if strings.TrimSpace(resp.Provider) == "sev_guest" {
-				req.GetAuxBlob = true
-				resp, err := report.Get(client, req)
-				if err != nil {
-					errMsg := fmt.Errorf("failed to get TSM report: %v", err)
-					return getEvidenceError(errMsg, http.StatusInternalServerError)
-				}
-				out.AuxBlob = resp.AuxBlob
-			}
+		if in.ContentType == tokens.TSMReportMediaTypeCBOR {
+			encodeOp = out.ToCBOR
+			encodeAs = "CBOR"
+		} else {
+			encodeOp = out.ToJSON
+		}
 
-			var encodeOp func() ([]byte, error)
-			encodeAs := "JSON"
+		outEncoded, err := encodeOp()
+		if err != nil {
+			errMsg := fmt.Errorf("failed to encode TSM report as %s: %v", encodeAs, err)
+			return getEvidenceError(errMsg, http.StatusInternalServerError)
+		}
 
-			if in.ContentType == tokens.TSMReportMediaTypeCBOR {
-				encodeOp = out.ToCBOR
-				encodeAs = "CBOR"
-			} else {
-				encodeOp = out.ToJSON
-			}
-
-			outEncoded, err := encodeOp()
-			if err != nil {
-				errMsg := fmt.Errorf("failed to encode TSM report as %s: %v", encodeAs, err)
-				return getEvidenceError(errMsg, http.StatusInternalServerError)
-			}
-
-			return &compositor.EvidenceOut{
-				Status:     statusSucceeded,
-				Evidence:   outEncoded,
-				StatusCode: http.StatusOK,
-			}
+		return &compositor.EvidenceOut{
+			Status:     statusSucceeded,
+			Evidence:   outEncoded,
+			StatusCode: http.StatusOK,
 		}
 	}
 

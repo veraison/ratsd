@@ -6,8 +6,6 @@ import (
 	"context"
 
 	"github.com/veraison/ratsd/proto/compositor"
-	"github.com/veraison/services/log"
-	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -78,17 +76,4 @@ func (c *GRPCClient) GetOptions() *compositor.OptionsOut {
 	}
 
 	return resp
-}
-
-var logger *zap.SugaredLogger
-
-func init() {
-}
-
-// note: we cannot simply initialize logger
-func getLogger() *zap.SugaredLogger {
-	if logger == nil {
-		logger = log.Named("plugin.rpc")
-	}
-	return logger
 }

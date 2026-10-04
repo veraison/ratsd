@@ -58,9 +58,9 @@ func (o *GoPluginManager) LookupByName(name string) (IPluggable, error) {
 }
 
 func (o *GoPluginManager) GetPluginList() []string {
-	var registeredPlugin []string
+	registeredPlugin := make([]string, 0, len(o.loader.loadedByName))
 
-	for name, _ := range o.loader.loadedByName {
+	for name := range o.loader.loadedByName {
 		registeredPlugin = append(registeredPlugin, name)
 	}
 
