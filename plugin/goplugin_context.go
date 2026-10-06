@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2025-2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package plugin
 
@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-plugin"
-	"github.com/veraison/services/log"
+	"github.com/veraison/ratsd/log"
 	"go.uber.org/zap"
 )
 
@@ -62,8 +62,8 @@ func createPluginContext(
 		}
 
 		secureConfig := &plugin.SecureConfig{
-			Checksum:[]byte(checksum),
-			Hash: sha256.New(),
+			Checksum: []byte(checksum),
+			Hash:     sha256.New(),
 		}
 		cfg.SecureConfig = secureConfig
 	}
