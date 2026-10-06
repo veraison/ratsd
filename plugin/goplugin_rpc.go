@@ -1,12 +1,12 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2025-2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package plugin
 
 import (
 	"context"
 
+	"github.com/veraison/ratsd/log"
 	"github.com/veraison/ratsd/proto/compositor"
-	"github.com/veraison/services/log"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/emptypb"
 )

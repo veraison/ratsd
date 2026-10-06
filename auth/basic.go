@@ -10,7 +10,7 @@ import (
 	"net/http"
 
 	"github.com/spf13/viper"
-	"github.com/veraison/services/log"
+	"github.com/veraison/ratsd/log"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
