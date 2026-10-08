@@ -8,8 +8,8 @@ import (
 
 	"github.com/veraison/ratsd/api"
 	"github.com/veraison/ratsd/auth"
+	"github.com/veraison/ratsd/config"
 	"github.com/veraison/ratsd/plugin"
-	"github.com/veraison/services/config"
 	"github.com/veraison/services/log"
 )
 
@@ -18,13 +18,13 @@ var (
 )
 
 type cfg struct {
-	ListenAddr  string `mapstructure:"listen-addr" valid:"dialstring"`
-	Protocol    string `mapstructure:"protocol" valid:"in(http|https)"`
-	Cert        string `mapstructure:"cert" config:"zerodefault"`
-	CertKey     string `mapstructure:"cert-key" config:"zerodefault"`
-	PluginDir   string `mapstructure:"plugin-dir" config:"zerodefault"`
-	ListOptions string `mapstructure:"list-options" valid:"in(all|selected)"`
-	SecureLoader  bool   `mapstructure:"secure-loader" config:"zerodefault"`
+	ListenAddr   string `mapstructure:"listen-addr" valid:"dialstring"`
+	Protocol     string `mapstructure:"protocol" valid:"in(http|https)"`
+	Cert         string `mapstructure:"cert" config:"zerodefault"`
+	CertKey      string `mapstructure:"cert-key" config:"zerodefault"`
+	PluginDir    string `mapstructure:"plugin-dir" config:"zerodefault"`
+	ListOptions  string `mapstructure:"list-options" valid:"in(all|selected)"`
+	SecureLoader bool   `mapstructure:"secure-loader" config:"zerodefault"`
 }
 
 func (o cfg) Validate() error {
