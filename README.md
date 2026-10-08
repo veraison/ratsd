@@ -42,6 +42,41 @@ make[1]: Leaving directory '/builddir/build/BUILD/ratsd-1.0.3+la3/attesters'
 
 The `nvgpu` attester supports NVIDIA Hopper and Blackwell GPUs with confidential computing enabled. The attester host must have a compatible NVIDIA driver installed; the driver provides the `libnvidia-ml.so.1` NVML library that the plugin loads at runtime. Containerized deployments must expose the NVIDIA devices and driver libraries to the container.
 
+# Configuration
+
+RATSD's local `config` package adapts the configuration handling from
+[veraison/services](https://github.com/veraison/services/tree/v0.0.2501/config).
+It uses Viper to read configuration and mapstructure and govalidator to load
+and validate component settings. The services dependency is still used for logging.
+
+Run `./ratsd -c /path/to/config.yaml` (or `--config`) to choose a configuration
+file. The default is `config.yaml` in the current working directory. `-h` /
+`--help` prints usage, and `-v` / `--version` prints the build version without
+loading configuration. Set the version when building with
+`go build -ldflags '-X github.com/veraison/ratsd/config.Version=1.0.3' -o ratsd ./cmd`.
+
+The `ratsd` section is required; `logging` and `auth` are optional. The supplied
+`config.yaml` is a working HTTP example. HTTPS requires both `cert` and
+`cert-key`. Enabling `secure-loader` also requires a `plugins` section mapping
+plugin names to SHA-256 checksums.
+
+For components using the package:
+
+- `ReadRawConfig(path, allowNotFound)` reads an explicit file, inferring its
+  format from its extension, or searches for `config.yaml` when the path is empty.
+  `allowNotFound` permits missing files but still reports invalid configuration.
+  The raw Viper retains services' `VERAISON_` environment prefix, with uppercase
+  dotted keys such as `VERAISON_RATSD.PROTOCOL`. Viper subtrees do not inherit
+  this automatic environment lookup.
+- `GetSubs(source, "ratsd", "*logging")` extracts component sections. Prefixing
+  a name with `*` makes it optional and returns an empty Viper if it is absent.
+- `NewLoader(&settings)` loads from a map or Viper into a struct. Nonzero field
+  values supply defaults; `config:"zerodefault"` permits zero-valued defaults.
+  Missing and unknown directives are errors. `NewNonExclusiveLoader` allows
+  unknown directives, and `mapstructure:",remain"` captures backend settings.
+- `mapstructure` tags map directive names to fields, `valid` tags validate field
+  formats, and an optional `Validate() error` method checks additional constraints.
+
 # Query ratsd
 
 By default, ratsd core listens on port 8895. Use `POST /ratsd/chares` to retrieve a CMW collection containing evidence from each sub-attester. This API call requires the request body to be the JSON object `{"nonce": $(Base64 string of 64-byte data)}` replacing the placeholder with a proper base64 string. See the following example:
