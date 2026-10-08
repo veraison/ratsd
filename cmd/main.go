@@ -1,4 +1,4 @@
-// Copyright 2025-2026 Contributors to the Veraison project.
+// Copyright 2025 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package main
 
@@ -8,9 +8,9 @@ import (
 
 	"github.com/veraison/ratsd/api"
 	"github.com/veraison/ratsd/auth"
+	"github.com/veraison/ratsd/config"
 	"github.com/veraison/ratsd/log"
 	"github.com/veraison/ratsd/plugin"
-	"github.com/veraison/services/config"
 )
 
 var (
