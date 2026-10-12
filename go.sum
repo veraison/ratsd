@@ -300,8 +300,6 @@ github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53 h1:5gnX2TrGd/Xz8DOp2O
 github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53/go.mod h1:+kxt8iuFiVvKRs2VQ1Ho7bbAScXAB/kHFFuP5Biw19I=
 github.com/veraison/go-cose v1.3.0 h1:2/H5w8kdSpQJyVtIhx8gmwPJ2uSz1PkyWFx0idbd7rk=
 github.com/veraison/go-cose v1.3.0/go.mod h1:df09OV91aHoQWLmy1KsDdYiagtXgyAwAl8vFeFn1gMc=
-github.com/veraison/services v0.0.2501 h1:tK4a92RvceURIlT0pEkz3fU0TpaZ9jbcWqkPRkMsZXY=
-github.com/veraison/services v0.0.2501/go.mod h1:snBdw93xJ4j9sSrYueT3QlAB8oWGePwkq7H+kYf/lLc=
 github.com/vmware-labs/yaml-jsonpath v0.3.2 h1:/5QKeCBGdsInyDCyVNLbXyilb61MXGi9NP674f9Hobk=
 github.com/vmware-labs/yaml-jsonpath v0.3.2/go.mod h1:U6whw1z03QyqgWdgXxvVnQ90zN1BWz5V+51Ewf8k+rQ=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

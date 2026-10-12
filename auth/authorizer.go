@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/viper"
-	"github.com/veraison/services/config"
+	"github.com/veraison/ratsd/config"
 	"go.uber.org/zap"
 )
 
