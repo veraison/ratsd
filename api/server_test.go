@@ -21,11 +21,11 @@ import (
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
 	"github.com/veraison/ratsd/attesters/tsm"
+	"github.com/veraison/ratsd/log"
 	"github.com/veraison/ratsd/proto/compositor"
 	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
 	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token/v2"
 	"github.com/veraison/ratsd/tokens"
-	"github.com/veraison/services/log"
 )
 
 func mustMonadType(t testing.TB, monad *cmw.CMW) string {
