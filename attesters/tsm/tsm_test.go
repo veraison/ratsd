@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2025-2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package tsm
 
@@ -40,6 +40,7 @@ func Test_getEvidenceError(t *testing.T) {
 func Test_GetOptions(t *testing.T) {
 	options := []*compositor.Option{
 		&compositor.Option{Name: "privilege_level", Type: "string"},
+		&compositor.Option{Name: "service_provider", Type: "string"},
 	}
 
 	expected := &compositor.OptionsOut{
@@ -123,6 +124,10 @@ func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 			"privilege_level invalid is invalid"},
 		{"privilege level less than zero", `{"privilege_level": "-20"}`,
 			"privilege_level -20 is invalid"},
+		{"unsupported service provider", `{"service_provider": "unsupported"}`,
+			`service_provider "unsupported" is invalid: expected svsm`},
+		{"empty service provider", `{"service_provider": ""}`,
+			`service_provider "" is invalid: expected svsm`},
 		{"invalid json", `{"privilege_level"}`,
 			`failed to parse {"privilege_level"}: invalid character '}' after object key`},
 	}

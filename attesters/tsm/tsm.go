@@ -1,14 +1,16 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2025-2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 package tsm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/google/go-configfs-tsm/configfs/configfsi"
 	"github.com/google/go-configfs-tsm/configfs/linuxtsm"
 	"github.com/google/go-configfs-tsm/report"
 	"github.com/veraison/ratsd/proto/compositor"
@@ -39,7 +41,16 @@ var (
 	statusSucceeded = &compositor.Status{Result: true, Error: ""}
 )
 
-type TSMPlugin struct{}
+type TSMPlugin struct {
+	newClient func() (configfsi.Client, error)
+}
+
+func (t *TSMPlugin) makeClient() (configfsi.Client, error) {
+	if t.newClient != nil {
+		return t.newClient()
+	}
+	return linuxtsm.MakeClient()
+}
 
 func getEvidenceError(e error, statusCode uint32) *compositor.EvidenceOut {
 	return &compositor.EvidenceOut{
@@ -53,6 +64,7 @@ func getEvidenceError(e error, statusCode uint32) *compositor.EvidenceOut {
 func (t *TSMPlugin) GetOptions() *compositor.OptionsOut {
 	options := []*compositor.Option{
 		&compositor.Option{Name: "privilege_level", Type: "string"},
+		&compositor.Option{Name: "service_provider", Type: "string"},
 	}
 
 	return &compositor.OptionsOut{
@@ -69,7 +81,7 @@ func (t *TSMPlugin) GetSubAttesterID() *compositor.SubAttesterIDOut {
 }
 
 func (t *TSMPlugin) GetSupportedFormats() *compositor.SupportedFormatsOut {
-	if _, err := linuxtsm.MakeClient(); err != nil {
+	if _, err := t.makeClient(); err != nil {
 		return &compositor.SupportedFormatsOut{
 			Status: &compositor.Status{
 				Result: false,
@@ -118,34 +130,22 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				req.Privilege = &report.Privilege{Level: uint(level)}
 			}
 
-			client, err := linuxtsm.MakeClient()
+			serviceProvider, hasServiceProvider := options["service_provider"]
+			if hasServiceProvider && serviceProvider != "svsm" {
+				errMsg := fmt.Errorf("service_provider %q is invalid: expected svsm", serviceProvider)
+				return getEvidenceError(errMsg, http.StatusBadRequest)
+			}
+
+			client, err := t.makeClient()
 			if err != nil {
 				errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
 				return getEvidenceError(errMsg, http.StatusInternalServerError)
 			}
 
-			resp, err := report.Get(client, req)
+			out, err := getReport(client, req, serviceProvider)
 			if err != nil {
 				errMsg := fmt.Errorf("failed to get TSM report: %v", err)
 				return getEvidenceError(errMsg, http.StatusInternalServerError)
-			}
-
-			out := &tokens.TSMReport{
-				Provider: resp.Provider,
-				OutBlob:  resp.OutBlob,
-				AuxBlob:  resp.AuxBlob,
-			}
-
-			// SEV-SNP stores cert table in auxblob. Get the report one more time to fetch the auxblob
-			// resp.Provider might contain newlines
-			if strings.TrimSpace(resp.Provider) == "sev_guest" {
-				req.GetAuxBlob = true
-				resp, err := report.Get(client, req)
-				if err != nil {
-					errMsg := fmt.Errorf("failed to get TSM report: %v", err)
-					return getEvidenceError(errMsg, http.StatusInternalServerError)
-				}
-				out.AuxBlob = resp.AuxBlob
 			}
 
 			var encodeOp func() ([]byte, error)
@@ -174,4 +174,47 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 
 	errMsg := fmt.Errorf("no supported format in tsm plugin matches the requested format")
 	return getEvidenceError(errMsg, http.StatusBadRequest)
+}
+
+func getReport(client configfsi.Client, req *report.Request, serviceProvider string) (out *tokens.TSMReport, err error) {
+	openReport, err := report.Create(client, req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		err = errors.Join(err, openReport.Destroy())
+	}()
+
+	if serviceProvider != "" {
+		if err := openReport.WriteOption("service_provider", []byte(serviceProvider)); err != nil {
+			return nil, err
+		}
+	}
+
+	resp, err := openReport.Get()
+	if err != nil {
+		return nil, err
+	}
+	out = &tokens.TSMReport{
+		Provider: resp.Provider,
+		OutBlob:  resp.OutBlob,
+		AuxBlob:  resp.AuxBlob,
+	}
+
+	if strings.TrimSpace(resp.Provider) == "sev_guest" {
+		out.AuxBlob, err = openReport.ReadOption("auxblob")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if serviceProvider == "svsm" {
+		out.ServiceProvider = &serviceProvider
+		out.ManifestBlob, err = openReport.ReadOption("manifestblob")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return out, nil
 }
