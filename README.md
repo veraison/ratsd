@@ -53,7 +53,7 @@ $ curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/
 Use endpoint `GET /ratsd/subattesters` to query all available leaf attesters and their available options. The usage can be found in the following
 ```console
 $ curl http://localhost:8895/ratsd/subattesters
-[{"name":"mock-tsm","options":[{"data-type":"string","name":"privilege_level"}]},{"name":"tsm-report","options":[{"data-type":"string","name":"privilege_level"}]}]
+[{"name":"mock-tsm","options":[{"data-type":"string","name":"privilege_level"}]},{"name":"tsm-report","options":[{"data-type":"string","name":"privilege_level"},{"data-type":"string","name":"service_provider"}]}]
 ```
 ## Complex queries
 
@@ -61,6 +61,13 @@ Ratsd currently supports the Trusted Secure Module `tsm` attester. You can speci
 ```bash
 curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "tsm-report":{"privilege_level":"1"}}'
 ```
+
+To request SVSM attestation on a host with configfs-TSM SVSM support, set `service_provider` to `"svsm"`:
+```bash
+curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "attester-selection":["tsm-report"], "tsm-report":{"service_provider":"svsm"}}'
+```
+The TSM evidence includes `service_provider: "svsm"` and the `manifestblob` returned by SVSM, alongside the report and any SEV-SNP certificate table. These fields are supported in both JSON and CBOR output; JSON encodes the manifest as unpadded base64url. The `provider` output continues to identify the hardware report format (for example, `sev_guest`). Omitting `service_provider` uses the default hardware attestation path. The `privilege_level` option can also be supplied with `service_provider`.
+
 ### Get evidence from the selected attester only
 
 If more than one leaf attester is present, ratsd returns evidence from all available attesters in the response to `/ratsd/chares` by default. To limit the response to specific attesters, include `attester-selection` in the request body and list the desired attester names there. If an attester has options, specify them in a top-level field named after the attester. If an attester has no options, simply omit the top-level field for that attester. The following is an example request:
