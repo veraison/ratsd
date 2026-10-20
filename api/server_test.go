@@ -18,13 +18,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/veraison/cmw"
+	ratsdtoken "github.com/veraison/ratsd-token"
+	ratsdtokenv2 "github.com/veraison/ratsd-token/v2"
 	mock_deps "github.com/veraison/ratsd/api/mocks"
 	"github.com/veraison/ratsd/attesters/mocktsm"
 	"github.com/veraison/ratsd/attesters/tsm"
 	"github.com/veraison/ratsd/log"
 	"github.com/veraison/ratsd/proto/compositor"
-	ratsdtoken "github.com/veraison/ratsd/ratsd-token"
-	ratsdtokenv2 "github.com/veraison/ratsd/ratsd-token/v2"
 	"github.com/veraison/ratsd/tokens"
 )
 
