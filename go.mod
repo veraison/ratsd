@@ -18,8 +18,8 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veraison/cmw v0.3.0
-	github.com/veraison/ratsd/ratsd-token v1.0.0
-	github.com/veraison/ratsd/ratsd-token/v2 v2.0.0
+	github.com/veraison/ratsd-token v0.0.0-20261007144201-93500f814d56
+	github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56
 	github.com/veraison/services v0.0.2501
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.55.0
@@ -79,7 +79,3 @@ require (
 )
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
-
-replace github.com/veraison/ratsd/ratsd-token => ./ratsd-token
-
-replace github.com/veraison/ratsd/ratsd-token/v2 => ./ratsd-token/v2

@@ -7,6 +7,11 @@ The binary ratsd is built by using make using the following steps:
 - Install golang version specified in go.mod
 - Ensure GOPATH is available in the shell path (export GOPATH="$HOME/go"; export PATH=$PATH:$GOPATH/bin)
 - Build RATSd using make
+
+RATSD uses the standalone [ratsd-token](https://github.com/veraison/ratsd-token)
+modules for legacy JSON and v2 CBOR/COSE tokens. Both versions are pinned in
+`go.mod` and downloaded by Go during the build.
+
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
 Regenerate the generated ratsd core code after changing the OpenAPI spec with:
 ```bash
