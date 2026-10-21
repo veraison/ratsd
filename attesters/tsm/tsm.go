@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,8 @@ var (
 			NonceSize:   tsmNonceSize,
 		},
 	}
+
+	supportedServiceProviders = []string{"svsm"}
 
 	statusSucceeded = &compositor.Status{Result: true, Error: ""}
 )
@@ -131,8 +134,9 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 			}
 
 			serviceProvider, hasServiceProvider := options["service_provider"]
-			if hasServiceProvider && serviceProvider != "svsm" {
-				errMsg := fmt.Errorf("service_provider %q is invalid: expected svsm", serviceProvider)
+			if hasServiceProvider && !slices.Contains(supportedServiceProviders, serviceProvider) {
+				errMsg := fmt.Errorf("service_provider %q is invalid: expected one of %s",
+					serviceProvider, strings.Join(supportedServiceProviders, ", "))
 				return getEvidenceError(errMsg, http.StatusBadRequest)
 			}
 

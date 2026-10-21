@@ -125,9 +125,9 @@ func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 		{"privilege level less than zero", `{"privilege_level": "-20"}`,
 			"privilege_level -20 is invalid"},
 		{"unsupported service provider", `{"service_provider": "unsupported"}`,
-			`service_provider "unsupported" is invalid: expected svsm`},
+			`service_provider "unsupported" is invalid: expected one of svsm`},
 		{"empty service provider", `{"service_provider": ""}`,
-			`service_provider "" is invalid: expected svsm`},
+			`service_provider "" is invalid: expected one of svsm`},
 		{"invalid json", `{"privilege_level"}`,
 			`failed to parse {"privilege_level"}: invalid character '}' after object key`},
 	}

@@ -66,7 +66,9 @@ To request SVSM attestation on a host with configfs-TSM SVSM support, set `servi
 ```bash
 curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "attester-selection":["tsm-report"], "tsm-report":{"service_provider":"svsm"}}'
 ```
-The TSM evidence includes `service_provider: "svsm"` and the `manifestblob` returned by SVSM, alongside the report and any SEV-SNP certificate table. These fields are supported in both JSON and CBOR output; JSON encodes the manifest as unpadded base64url. The `provider` output continues to identify the hardware report format (for example, `sev_guest`). Omitting `service_provider` uses the default hardware attestation path. The `privilege_level` option can also be supplied with `service_provider`.
+The TSM evidence includes `service_provider: "svsm"` and the `manifestblob` returned by SVSM, alongside the report and any SEV-SNP certificate table. These fields are supported in both JSON and CBOR output; JSON encodes the manifest as unpadded base64url. The `provider` output continues to identify the hardware report format (for example, `sev_guest`). Omitting `service_provider` uses the default hardware attestation path.
+
+SVSM attestation uses `SVSM_ATTEST_SERVICES` to obtain a VMPL0 report that binds the services manifest, as specified in [section 7.1 of the SVSM specification](https://docs.amd.com/v/u/en-US/58019.pdf). Omit `privilege_level` when selecting `"svsm"`: SVSM requests the VMPL0 report on behalf of the guest, even when the guest runs at a higher-numbered VMPL. The `privilege_level` option selects the report VMPL on the default hardware attestation path; it does not select the VMPL of an SVSM report. An explicitly supplied `privilege_level` is still validated by configfs, so setting it to `"0"` can fail when the guest's `privlevel_floor` is greater than zero.
 
 ### Get evidence from the selected attester only
 

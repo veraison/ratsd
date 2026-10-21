@@ -17,8 +17,8 @@ import (
 	"github.com/veraison/ratsd/tokens"
 )
 
-func fakeReportClient(provider string) *faketsm.ReportSubsystem {
-	client := faketsm.ReportV7(0)
+func fakeReportClient(provider string, privilegeFloor uint) *faketsm.ReportSubsystem {
+	client := faketsm.ReportV7(privilegeFloor)
 	makeEntry := client.MakeEntry
 	client.MakeEntry = func() *faketsm.ReportEntry {
 		entry := makeEntry()
@@ -59,17 +59,20 @@ func Test_GetEvidence_ServiceProvider(t *testing.T) {
 		options         string
 		serviceProvider string
 		privilegeLevel  string
+		privilegeFloor  uint
 	}{
 		{name: "default SEV-SNP", provider: "sev_guest\n", privilegeLevel: "0\n"},
+		{name: "SEV-SNP with privilege level", provider: "sev_guest\n", options: `{"privilege_level":"1"}`, privilegeLevel: "1", privilegeFloor: 1},
 		{name: "default TDX", provider: "tdx_guest\n", privilegeLevel: "0\n"},
 		{name: "SVSM", provider: "sev_guest\n", options: `{"service_provider":"svsm"}`, serviceProvider: "svsm", privilegeLevel: "0\n"},
+		{name: "SVSM with guest privilege floor 1", provider: "sev_guest\n", options: `{"service_provider":"svsm"}`, serviceProvider: "svsm", privilegeLevel: "0\n", privilegeFloor: 1},
 		{name: "SVSM with privilege level", provider: "sev_guest\n", options: `{"service_provider":"svsm","privilege_level":"1"}`, serviceProvider: "svsm", privilegeLevel: "1"},
 	}
 
 	for _, test := range tests {
 		for _, contentType := range []string{tokens.TSMReportMediaTypeJSON, tokens.TSMReportMediaTypeCBOR} {
 			t.Run(test.name+"/"+contentType, func(t *testing.T) {
-				client := fakeReportClient(test.provider)
+				client := fakeReportClient(test.provider, test.privilegeFloor)
 				created := 0
 				makeEntry := client.MakeEntry
 				client.MakeEntry = func() *faketsm.ReportEntry {
@@ -142,7 +145,7 @@ func Test_GetEvidence_SVSM_Failure(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := fakeReportClient("sev_guest\n")
+			client := fakeReportClient("sev_guest\n", 0)
 			checkInAttr := client.CheckInAttr
 			client.CheckInAttr = func(entry *faketsm.ReportEntry, attribute string, contents []byte) error {
 				if attribute == test.attribute {
