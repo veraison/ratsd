@@ -21,9 +21,21 @@ make generate
 ## Building ratsd core and leaf attesters
 
 Use the 'make build' command to build both the ratsd core and the leaf attesters. To build only the ratsd core, run `make build-la`. Run `make build-sa` to build only the leaf attesters.
+
+`make build` and `make build-la` set the version reported by `./ratsd --version`
+from the latest `v`-prefixed version tag and the current Git commit, for example
+`0.0.1+7c81383`. To override it, including when building a source archive, set
+`RATSD_BUILD_VERSION`:
+
+```bash
+RATSD_BUILD_VERSION=1.0.3 make build-la
+```
+
+Without Git metadata, the version defaults to `0.0.0-unknown`.
+
 ```console
 $ make build
-go build -o ratsd -buildmode=pie ./cmd
+go build -o ratsd -buildmode=pie -ldflags "-X 'github.com/veraison/ratsd/config.Version=0.0.1+7c81383'" ./cmd
 make -C attesters/
 make[1]: Entering directory '/builddir/build/BUILD/ratsd-1.0.3+la3/attesters'
 make -C tsm
@@ -46,6 +58,40 @@ make[1]: Leaving directory '/builddir/build/BUILD/ratsd-1.0.3+la3/attesters'
 ### NVIDIA GPU attester prerequisites
 
 The `nvgpu` attester supports NVIDIA Hopper and Blackwell GPUs with confidential computing enabled. The attester host must have a compatible NVIDIA driver installed; the driver provides the `libnvidia-ml.so.1` NVML library that the plugin loads at runtime. Containerized deployments must expose the NVIDIA devices and driver libraries to the container.
+
+# Configuration
+
+Run `./ratsd -c /path/to/config.yaml` (or `--config`) to choose a configuration
+file. The default is `config.yaml` in the current working directory. `-h` /
+`--help` prints usage, and `-v` / `--version` prints the build version without
+loading configuration.
+
+The `ratsd` section is required. The supplied [config.yaml](config.yaml) is a
+working HTTP example. Available settings within `ratsd` are:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `listen-addr` | `localhost:8895` | Address and port to listen on. |
+| `protocol` | `https` | `http` or `https`. |
+| `cert` | Empty | TLS certificate file; required for HTTPS. |
+| `cert-key` | Empty | TLS private key file; required for HTTPS. |
+| `plugin-dir` | Must be supplied | Directory containing the attester `.plugin` executables. |
+| `list-options` | Must be supplied | `all` allows requests without attester selection; `selected` requires it. |
+| `secure-loader` | `false` | Verify plugin SHA-256 checksums before loading them. |
+
+When `secure-loader` is enabled, also supply a top-level `plugins` section
+mapping plugin names to hexadecimal SHA-256 checksums.
+
+The `logging` and `auth` sections are optional. See the
+[logging options](log/README.md) for log levels, formats, and destinations.
+`auth.backend` defaults to `passthrough`; `none` also disables authentication.
+For HTTP Basic authentication, set `auth.backend` to `basic` and supply bcrypt
+password hashes under `auth.users.<username>.password`.
+
+Runtime settings must be supplied in the configuration file. Environment
+variables such as `VERAISON_RATSD.PROTOCOL` do not currently override these
+settings. `RATSD_BUILD_VERSION` controls the build version as described above;
+it does not change an already-built binary.
 
 # Query ratsd
 
@@ -87,7 +133,7 @@ If more than one leaf attester is present, ratsd returns evidence from all avail
 }
 ```
 
-If `list-options: selected` is set in `config.yaml`, `attester-selection` is required and must contain at least one attester. If `list-options` is not set, or is set to `all`, omitting `attester-selection` returns evidence from all available attesters, while providing it limits the response to the selected attesters only.
+If `list-options: selected` is set in `config.yaml`, `attester-selection` is required and must contain at least one attester. If `list-options: all` is set, omitting `attester-selection` returns evidence from all available attesters, while providing it limits the response to the selected attesters only.
 ### Content type selection
 
 Pick the desired output content type of each sub-attester

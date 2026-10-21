@@ -1,0 +1,21 @@
+#!/bin/sh
+# Copyright 2026 Contributors to the Veraison project.
+# SPDX-License-Identifier: Apache-2.0
+
+if [ -n "$RATSD_BUILD_VERSION" ]; then
+	printf '%s\n' "$RATSD_BUILD_VERSION"
+	exit 0
+fi
+
+source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd) || exit 1
+
+if [ ! -e "$source_dir/.git" ] ||
+	! git_commit=$(git -C "$source_dir" rev-parse --revs-only --short HEAD 2>/dev/null) ||
+	[ -z "$git_commit" ]; then
+	printf '%s\n' '0.0.0-unknown'
+	exit 0
+fi
+
+git_version_tag=$(git -C "$source_dir" tag --list 'v[0-9]*' --sort=version:refname | tail -n 1)
+git_version_tag=${git_version_tag:-v0.0.0}
+printf '%s+%s\n' "${git_version_tag#v}" "$git_commit"
