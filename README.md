@@ -58,7 +58,7 @@ $ curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/
 Use endpoint `GET /ratsd/subattesters` to query all available leaf attesters and their available options. The usage can be found in the following
 ```console
 $ curl http://localhost:8895/ratsd/subattesters
-[{"name":"mock-tsm","options":[{"data-type":"string","name":"privilege_level"}]},{"name":"tsm-report","options":[{"data-type":"string","name":"privilege_level"}]}]
+[{"name":"mock-tsm","options":[{"data-type":"string","name":"privilege_level"}]},{"name":"tsm-report","options":[{"data-type":"string","name":"privilege_level"},{"data-type":"string","name":"service_provider"},{"data-type":"string","name":"service_guid"}]}]
 ```
 ## Complex queries
 
@@ -66,6 +66,26 @@ Ratsd currently supports the Trusted Secure Module `tsm` attester. You can speci
 ```bash
 curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "tsm-report":{"privilege_level":"1"}}'
 ```
+
+To request SVSM attestation on a host with configfs-TSM SVSM support, set `service_provider` to `"svsm"`:
+```bash
+curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA", "attester-selection":["tsm-report"], "tsm-report":{"service_provider":"svsm"}}'
+```
+The TSM evidence includes `service_provider: "svsm"` and the `manifestblob` returned by SVSM, alongside the report and any SEV-SNP certificate table. These fields are supported in both JSON and CBOR output; JSON encodes the manifest as unpadded base64url. The `provider` output continues to identify the hardware report format (for example, `sev_guest`). Omitting `service_provider` uses the default hardware attestation path.
+
+Selecting `"svsm"` without `service_guid` requests attestation for all active SVSM services, including vTPM when present. The plugin leaves the configfs `service_guid` attribute unset, preserving the null-GUID default that selects `SVSM_ATTEST_SERVICES` ([Linux configfs-TSM ABI](https://www.kernel.org/doc/Documentation/ABI/testing/configfs-tsm)).
+
+To select a service, supply `service_guid` alongside `service_provider`. For example, the following options select vTPM:
+```json
+"tsm-report": {
+  "service_provider": "svsm",
+  "service_guid": "c476f1eb-0123-45a5-9641-b4e7dde5bfe3"
+}
+```
+The GUID is passed unchanged to configfs. Linux validates it and determines the report and manifest contents; the plugin does not restrict GUIDs to a known list or interpret the returned blobs. A non-null GUID selects `SVSM_ATTEST_SINGLE_SERVICE`; an explicit `00000000-0000-0000-0000-000000000000` selects all services. The vTPM GUID above returns its service manifest rather than the all-services manifest ([SVSM specification, sections 7.2 and 8.3.1](https://docs.amd.com/v/u/en-US/58019.pdf)). A `service_guid` option without `service_provider` is rejected.
+
+SVSM attestation uses `SVSM_ATTEST_SERVICES` or `SVSM_ATTEST_SINGLE_SERVICE` to obtain a VMPL0 report that binds the requested manifest, as specified in [sections 7.1 and 7.2 of the SVSM specification](https://docs.amd.com/v/u/en-US/58019.pdf). Omit `privilege_level` when selecting `"svsm"`: SVSM requests the VMPL0 report on behalf of the guest, even when the guest runs at a higher-numbered VMPL. The `privilege_level` option selects the report VMPL on the default hardware attestation path; it does not select the VMPL of an SVSM report. An explicitly supplied `privilege_level` is still validated by configfs, so setting it to `"0"` can fail when the guest's `privlevel_floor` is greater than zero.
+
 ### Get evidence from the selected attester only
 
 If more than one leaf attester is present, ratsd returns evidence from all available attesters in the response to `/ratsd/chares` by default. To limit the response to specific attesters, include `attester-selection` in the request body and list the desired attester names there. If an attester has options, specify them in a top-level field named after the attester. If an attester has no options, simply omit the top-level field for that attester. The following is an example request:
