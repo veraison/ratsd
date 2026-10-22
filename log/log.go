@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/veraison/services/config"
+	"github.com/veraison/ratsd/config"
 )
 
 // Global root logger. This is the logger used when the top-level log functions

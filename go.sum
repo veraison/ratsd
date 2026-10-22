@@ -304,8 +304,6 @@ github.com/veraison/ratsd-token v0.0.0-20261007144201-93500f814d56 h1:ZnHpD9x/Bp
 github.com/veraison/ratsd-token v0.0.0-20261007144201-93500f814d56/go.mod h1:IO9MOHW0aXt0Ac0N7AyjirDVyjBQDF+lFNDsnfBUWjU=
 github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56 h1:KG3A6pTZFmiCmdWm/E8Qjin84QCdDKcLaG+sPLbvOoQ=
 github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56/go.mod h1:7BARR4+BjnKuwDeYs2F2mGYfPXZRDiMr6CglMxP4yyk=
-github.com/veraison/services v0.0.2501 h1:tK4a92RvceURIlT0pEkz3fU0TpaZ9jbcWqkPRkMsZXY=
-github.com/veraison/services v0.0.2501/go.mod h1:snBdw93xJ4j9sSrYueT3QlAB8oWGePwkq7H+kYf/lLc=
 github.com/vmware-labs/yaml-jsonpath v0.3.2 h1:/5QKeCBGdsInyDCyVNLbXyilb61MXGi9NP674f9Hobk=
 github.com/vmware-labs/yaml-jsonpath v0.3.2/go.mod h1:U6whw1z03QyqgWdgXxvVnQ90zN1BWz5V+51Ewf8k+rQ=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
