@@ -23,11 +23,15 @@ func fakeReportClient(provider string, privilegeFloor uint) *faketsm.ReportSubsy
 	client.MakeEntry = func() *faketsm.ReportEntry {
 		entry := makeEntry()
 		entry.InAttrs["service_provider"] = &faketsm.ReportAttributeState{}
+		entry.InAttrs["service_guid"] = &faketsm.ReportAttributeState{}
 		return entry
 	}
 	checkInAttr := client.CheckInAttr
 	client.CheckInAttr = func(entry *faketsm.ReportEntry, attribute string, contents []byte) error {
 		if attribute == "service_provider" && string(contents) == "svsm" {
+			return nil
+		}
+		if attribute == "service_guid" && string(entry.InAttrs["service_provider"].Value) == "svsm" {
 			return nil
 		}
 		return checkInAttr(entry, attribute, contents)
@@ -58,6 +62,7 @@ func Test_GetEvidence_ServiceProvider(t *testing.T) {
 		provider        string
 		options         string
 		serviceProvider string
+		serviceGUID     string
 		privilegeLevel  string
 		privilegeFloor  uint
 	}{
@@ -67,12 +72,33 @@ func Test_GetEvidence_ServiceProvider(t *testing.T) {
 		{name: "SVSM", provider: "sev_guest\n", options: `{"service_provider":"svsm"}`, serviceProvider: "svsm", privilegeLevel: "0\n"},
 		{name: "SVSM with guest privilege floor 1", provider: "sev_guest\n", options: `{"service_provider":"svsm"}`, serviceProvider: "svsm", privilegeLevel: "0\n", privilegeFloor: 1},
 		{name: "SVSM with privilege level", provider: "sev_guest\n", options: `{"service_provider":"svsm","privilege_level":"1"}`, serviceProvider: "svsm", privilegeLevel: "1"},
+		{
+			name: "SVSM with vTPM GUID", provider: "sev_guest\n", serviceProvider: "svsm", privilegeLevel: "0\n",
+			options:     `{"service_provider":"svsm","service_guid":"c476f1eb-0123-45a5-9641-b4e7dde5bfe3"}`,
+			serviceGUID: "c476f1eb-0123-45a5-9641-b4e7dde5bfe3",
+		},
+		{
+			name: "SVSM with another GUID", provider: "sev_guest\n", serviceProvider: "svsm", privilegeLevel: "0\n",
+			options:     `{"service_provider":"svsm","service_guid":"11111111-2222-3333-4444-555555555555"}`,
+			serviceGUID: "11111111-2222-3333-4444-555555555555",
+		},
+		{
+			name: "SVSM with null GUID", provider: "sev_guest\n", serviceProvider: "svsm", privilegeLevel: "0\n",
+			options:     `{"service_provider":"svsm","service_guid":"00000000-0000-0000-0000-000000000000"}`,
+			serviceGUID: "00000000-0000-0000-0000-000000000000",
+		},
 	}
 
 	for _, test := range tests {
 		for _, contentType := range []string{tokens.TSMReportMediaTypeJSON, tokens.TSMReportMediaTypeCBOR} {
 			t.Run(test.name+"/"+contentType, func(t *testing.T) {
 				client := fakeReportClient(test.provider, test.privilegeFloor)
+				writes := make(map[string]int)
+				checkInAttr := client.CheckInAttr
+				client.CheckInAttr = func(entry *faketsm.ReportEntry, attribute string, contents []byte) error {
+					writes[attribute]++
+					return checkInAttr(entry, attribute, contents)
+				}
 				created := 0
 				makeEntry := client.MakeEntry
 				client.MakeEntry = func() *faketsm.ReportEntry {
@@ -86,6 +112,7 @@ func Test_GetEvidence_ServiceProvider(t *testing.T) {
 					assert.Equal(t, validNonceStr, string(entry.InAttrs["inblob"].Value))
 					assert.Equal(t, test.privilegeLevel, string(entry.InAttrs["privlevel"].Value))
 					assert.Equal(t, test.serviceProvider, string(entry.InAttrs["service_provider"].Value))
+					assert.Equal(t, test.serviceGUID, string(entry.InAttrs["service_guid"].Value))
 					return readAttr(entry, attribute)
 				}
 				plugin := &TSMPlugin{newClient: func() (configfsi.Client, error) { return client, nil }}
@@ -99,6 +126,11 @@ func Test_GetEvidence_ServiceProvider(t *testing.T) {
 				assert.Empty(t, client.Entries)
 				require.True(t, result.Status.Result, result.Status.Error)
 				require.EqualValues(t, http.StatusOK, result.StatusCode)
+				if test.serviceGUID != "" {
+					assert.Equal(t, 1, writes["service_guid"])
+				} else {
+					assert.Zero(t, writes["service_guid"])
+				}
 				decoded := &tokens.TSMReport{}
 				if contentType == tokens.TSMReportMediaTypeJSON {
 					require.NoError(t, decoded.FromJSON(result.Evidence))
@@ -135,8 +167,21 @@ func Test_GetEvidence_SVSM_Failure(t *testing.T) {
 		name      string
 		attribute string
 		tamper    bool
+		options   string
 	}{
 		{name: "service provider unavailable", attribute: "service_provider"},
+		{
+			name: "service GUID write failure", attribute: "service_guid",
+			options: `{"service_provider":"svsm","service_guid":"c476f1eb-0123-45a5-9641-b4e7dde5bfe3"}`,
+		},
+		{
+			name: "invalid service GUID delegated to configfs", attribute: "service_guid",
+			options: `{"service_provider":"svsm","service_guid":"invalid"}`,
+		},
+		{
+			name: "empty service GUID delegated to configfs", attribute: "service_guid",
+			options: `{"service_provider":"svsm","service_guid":""}`,
+		},
 		{name: "report read failure", attribute: "outblob"},
 		{name: "certificate read failure", attribute: "auxblob"},
 		{name: "manifest read failure", attribute: "manifestblob"},
@@ -165,10 +210,14 @@ func Test_GetEvidence_SVSM_Failure(t *testing.T) {
 				return readAttr(entry, attribute)
 			}
 			plugin := &TSMPlugin{newClient: func() (configfsi.Client, error) { return client, nil }}
+			options := test.options
+			if options == "" {
+				options = `{"service_provider":"svsm"}`
+			}
 			result := plugin.GetEvidence(&compositor.EvidenceIn{
 				ContentType: tokens.TSMReportMediaTypeJSON,
 				Nonce:       []byte(validNonceStr),
-				Options:     []byte(`{"service_provider":"svsm"}`),
+				Options:     []byte(options),
 			})
 
 			assert.False(t, result.Status.Result)

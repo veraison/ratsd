@@ -68,6 +68,7 @@ func (t *TSMPlugin) GetOptions() *compositor.OptionsOut {
 	options := []*compositor.Option{
 		&compositor.Option{Name: "privilege_level", Type: "string"},
 		&compositor.Option{Name: "service_provider", Type: "string"},
+		&compositor.Option{Name: "service_guid", Type: "string"},
 	}
 
 	return &compositor.OptionsOut{
@@ -140,13 +141,21 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 				return getEvidenceError(errMsg, http.StatusBadRequest)
 			}
 
+			var serviceGUID *string
+			if guid, ok := options["service_guid"]; ok {
+				if !hasServiceProvider {
+					return getEvidenceError(fmt.Errorf("service_guid requires service_provider"), http.StatusBadRequest)
+				}
+				serviceGUID = &guid
+			}
+
 			client, err := t.makeClient()
 			if err != nil {
 				errMsg := fmt.Errorf("failed to create config TSM client: %v", err)
 				return getEvidenceError(errMsg, http.StatusInternalServerError)
 			}
 
-			out, err := getReport(client, req, serviceProvider)
+			out, err := getReport(client, req, serviceProvider, serviceGUID)
 			if err != nil {
 				errMsg := fmt.Errorf("failed to get TSM report: %v", err)
 				return getEvidenceError(errMsg, http.StatusInternalServerError)
@@ -180,7 +189,7 @@ func (t *TSMPlugin) GetEvidence(in *compositor.EvidenceIn) *compositor.EvidenceO
 	return getEvidenceError(errMsg, http.StatusBadRequest)
 }
 
-func getReport(client configfsi.Client, req *report.Request, serviceProvider string) (out *tokens.TSMReport, err error) {
+func getReport(client configfsi.Client, req *report.Request, serviceProvider string, serviceGUID *string) (out *tokens.TSMReport, err error) {
 	openReport, err := report.Create(client, req)
 	if err != nil {
 		return nil, err
@@ -191,6 +200,12 @@ func getReport(client configfsi.Client, req *report.Request, serviceProvider str
 
 	if serviceProvider != "" {
 		if err := openReport.WriteOption("service_provider", []byte(serviceProvider)); err != nil {
+			return nil, err
+		}
+	}
+
+	if serviceGUID != nil {
+		if err := openReport.WriteOption("service_guid", []byte(*serviceGUID)); err != nil {
 			return nil, err
 		}
 	}

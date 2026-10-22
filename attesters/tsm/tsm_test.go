@@ -41,6 +41,7 @@ func Test_GetOptions(t *testing.T) {
 	options := []*compositor.Option{
 		&compositor.Option{Name: "privilege_level", Type: "string"},
 		&compositor.Option{Name: "service_provider", Type: "string"},
+		&compositor.Option{Name: "service_guid", Type: "string"},
 	}
 
 	expected := &compositor.OptionsOut{
@@ -128,6 +129,8 @@ func TestGetEvidence_With_Invalid_Options(t *testing.T) {
 			`service_provider "unsupported" is invalid: expected one of svsm`},
 		{"empty service provider", `{"service_provider": ""}`,
 			`service_provider "" is invalid: expected one of svsm`},
+		{"service GUID without service provider", `{"service_guid": "c476f1eb-0123-45a5-9641-b4e7dde5bfe3"}`,
+			"service_guid requires service_provider"},
 		{"invalid json", `{"privilege_level"}`,
 			`failed to parse {"privilege_level"}: invalid character '}' after object key`},
 	}

@@ -159,7 +159,7 @@ func TestRatsdSubattesters_valid_requests(t *testing.T) {
 		},
 		{
 			"with tsm and mocktsm attester",
-			"[{\"name\":\"mock-tsm\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"}]},{\"name\":\"tsm-report\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"},{\"data-type\":\"string\",\"name\":\"service_provider\"}]}]\n",
+			"[{\"name\":\"mock-tsm\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"}]},{\"name\":\"tsm-report\",\"options\":[{\"data-type\":\"string\",\"name\":\"privilege_level\"},{\"data-type\":\"string\",\"name\":\"service_provider\"},{\"data-type\":\"string\",\"name\":\"service_guid\"}]}]\n",
 		},
 	}
 
