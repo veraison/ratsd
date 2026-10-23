@@ -1,0 +1,64 @@
+name: Build RPM release package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install RPM build dependencies
+        run: dnf -y install gcc golang make rpm-build rpmdevtools tar
+
+      - name: Create source archive
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          test -n "$VERSION"
+          mkdir -p rpmbuild/SOURCES
+          tar --exclude=.git --exclude=rpmbuild \
+            --transform="s,^\\.,veraison-ratsd-${VERSION}," \
+            -czf "rpmbuild/SOURCES/veraison-ratsd-${VERSION}.tar.gz" .
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build RPM
+        run: |
+          rpmbuild -ba packaging/veraison-ratsd.spec \
+            --define "_topdir $PWD/rpmbuild" \
+            --define "version $VERSION" \
+            --define "release 1"
+          mkdir -p dist
+          find rpmbuild/RPMS -type f -name '*.rpm' -exec cp {} dist/ \;
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: veraison-ratsd-rpm
+          path: dist/*.rpm
+          if-no-files-found: error
+
+  upload-rpm:
+    needs: build-rpm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download RPM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: veraison-ratsd-rpm
+          path: dist
+
+      - name: Attach RPM to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/*.rpm --clobber
