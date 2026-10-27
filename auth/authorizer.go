@@ -1,4 +1,4 @@
-// Copyright 2025 Contributors to the Veraison project.
+// Copyright 2025-2026 Contributors to the Veraison project.
 // SPDX-License-Identifier: Apache-2.0
 
 package auth
@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/viper"
-	"github.com/veraison/services/config"
+	"github.com/veraison/ratsd/config"
 	"go.uber.org/zap"
 )
 

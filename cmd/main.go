@@ -8,9 +8,9 @@ import (
 
 	"github.com/veraison/ratsd/api"
 	"github.com/veraison/ratsd/auth"
+	"github.com/veraison/ratsd/config"
 	"github.com/veraison/ratsd/log"
 	"github.com/veraison/ratsd/plugin"
-	"github.com/veraison/services/config"
 )
 
 var (
