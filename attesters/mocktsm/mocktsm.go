@@ -11,8 +11,8 @@ import (
 	"github.com/google/go-configfs-tsm/configfs/configfsi"
 	"github.com/google/go-configfs-tsm/configfs/faketsm"
 	"github.com/google/go-configfs-tsm/report"
+	"github.com/veraison/ratsd-token/tokens"
 	"github.com/veraison/ratsd/proto/compositor"
-	"github.com/veraison/ratsd/tokens"
 )
 
 const (

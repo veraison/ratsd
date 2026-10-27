@@ -12,8 +12,8 @@ import (
 	nvtrustgpu "github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/gpu"
 	nvmocks "github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/veraison/ratsd-token/tokens"
 	"github.com/veraison/ratsd/proto/compositor"
-	"github.com/veraison/ratsd/tokens"
 )
 
 type fakeCollector struct {

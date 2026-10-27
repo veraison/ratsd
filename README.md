@@ -9,8 +9,9 @@ The binary ratsd is built by using make using the following steps:
 - Build RATSd using make
 
 RATSD uses the standalone [ratsd-token](https://github.com/veraison/ratsd-token)
-modules for legacy JSON and v2 CBOR/COSE attestation tokens. Both versions are pinned in
-`go.mod` and downloaded by Go during the build.
+modules for legacy JSON and v2 CBOR/COSE attestation tokens, plus TSM reports and
+NVIDIA GPU evidence formats. Both module versions are pinned in `go.mod` and
+downloaded by Go during the build.
 
 ## (Optional) Regenerate ratsd core code from OpenAPI spec
 Regenerate the generated ratsd core code after changing the OpenAPI spec with:
