@@ -21,7 +21,7 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.11.1
 	github.com/veraison/cmw v0.3.0
-	github.com/veraison/ratsd-token v0.0.0-20261007144201-93500f814d56
+	github.com/veraison/ratsd-token v0.0.0-20261027195537-1a1af9c38496
 	github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56
 	go.uber.org/zap v1.23.0
 	golang.org/x/crypto v0.55.0

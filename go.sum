@@ -300,8 +300,8 @@ github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53 h1:5gnX2TrGd/Xz8DOp2O
 github.com/veraison/eat v0.0.0-20220117140849-ddaf59d69f53/go.mod h1:+kxt8iuFiVvKRs2VQ1Ho7bbAScXAB/kHFFuP5Biw19I=
 github.com/veraison/go-cose v1.3.0 h1:2/H5w8kdSpQJyVtIhx8gmwPJ2uSz1PkyWFx0idbd7rk=
 github.com/veraison/go-cose v1.3.0/go.mod h1:df09OV91aHoQWLmy1KsDdYiagtXgyAwAl8vFeFn1gMc=
-github.com/veraison/ratsd-token v0.0.0-20261007144201-93500f814d56 h1:ZnHpD9x/Bpw1aSrv3xgSGcn4Q+l4DwuLuJ25+DLcIaI=
-github.com/veraison/ratsd-token v0.0.0-20261007144201-93500f814d56/go.mod h1:IO9MOHW0aXt0Ac0N7AyjirDVyjBQDF+lFNDsnfBUWjU=
+github.com/veraison/ratsd-token v0.0.0-20261027195537-1a1af9c38496 h1:n2GzynV7KOXAXM22aYEaQgwKba7hPKvncnVwA2+VWUE=
+github.com/veraison/ratsd-token v0.0.0-20261027195537-1a1af9c38496/go.mod h1:Ti++K/yPd7xe2cAd3hwwITmKvfVdh7Qv6gbZfmZzpmQ=
 github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56 h1:KG3A6pTZFmiCmdWm/E8Qjin84QCdDKcLaG+sPLbvOoQ=
 github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56/go.mod h1:7BARR4+BjnKuwDeYs2F2mGYfPXZRDiMr6CglMxP4yyk=
 github.com/vmware-labs/yaml-jsonpath v0.3.2 h1:/5QKeCBGdsInyDCyVNLbXyilb61MXGi9NP674f9Hobk=

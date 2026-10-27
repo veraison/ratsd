@@ -13,8 +13,8 @@ import (
 	"github.com/google/go-configfs-tsm/configfs/faketsm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/veraison/ratsd-token/tokens"
 	"github.com/veraison/ratsd/proto/compositor"
-	"github.com/veraison/ratsd/tokens"
 )
 
 func fakeReportClient(provider string, privilegeFloor uint) *faketsm.ReportSubsystem {

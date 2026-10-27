@@ -8,8 +8,8 @@ import (
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 	nvtrustgpu "github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/gpu"
+	"github.com/veraison/ratsd-token/tokens"
 	"github.com/veraison/ratsd/proto/compositor"
-	"github.com/veraison/ratsd/tokens"
 )
 
 const (
