@@ -1,13 +1,12 @@
 module github.com/veraison/ratsd
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/NVIDIA/go-nvml v0.13.0-1
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/confidentsecurity/go-nvtrust v0.2.2
 	github.com/fatih/color v1.13.0
-	github.com/fxamacker/cbor/v2 v2.7.0
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/golang/mock v1.6.0
 	github.com/google/go-configfs-tsm v0.3.2
@@ -24,8 +23,8 @@ require (
 	github.com/veraison/ratsd-token v0.0.0-20261027195537-1a1af9c38496
 	github.com/veraison/ratsd-token/v2 v2.0.0-20261007144201-93500f814d56
 	go.uber.org/zap v1.23.0
-	golang.org/x/crypto v0.55.0
-	golang.org/x/text v0.41.0
+	golang.org/x/crypto v0.58.0
+	golang.org/x/text v0.43.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
 )
@@ -35,6 +34,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
+	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -66,11 +66,11 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
