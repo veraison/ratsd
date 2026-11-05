@@ -134,6 +134,44 @@ func (t *testAttester) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	}
 }
 
+func TestRatsdNonceAdjustFunctions(t *testing.T) {
+	for _, options := range []string{"all", "selected"} {
+		t.Run(options, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			manager := mock_deps.NewMockIManager(ctrl)
+			server := NewServer(log.Named("test"), manager, options)
+			middlewareCalled := false
+			handler := HandlerWithOptions(server, StdHTTPServerOptions{
+				Middlewares: []MiddlewareFunc{
+					func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+							middlewareCalled = true
+							next.ServeHTTP(response, request)
+						})
+					},
+				},
+			})
+			request := httptest.NewRequest(http.MethodGet, "/ratsd/nonce-adjust-functions", nil)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+
+			require.Equal(t, http.StatusOK, response.Code)
+			assert.True(t, middlewareCalled)
+			assert.Equal(t, jsonType, response.Header().Get("Content-Type"))
+			var functions []string
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &functions))
+			assert.Equal(t, []string{"shake-128", "shake-256"}, functions)
+			assert.Contains(t, functions, defaultNonceAdjustFunction)
+
+			spec, err := GetSpec()
+			require.NoError(t, err)
+			require.NotNil(t, spec.Paths.Find("/ratsd/nonce-adjust-functions"))
+			assert.NotNil(t, spec.Paths.Find("/ratsd/nonce-adjust-functions").Get)
+			assert.ElementsMatch(t, spec.Components.Schemas["ChaResRequest"].Value.Properties["nonce-adjust-function"].Value.Enum, functions)
+		})
+	}
+}
+
 func TestRatsdSubattesters_valid_requests(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

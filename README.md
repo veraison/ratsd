@@ -119,6 +119,17 @@ The response's nonce adjustment metadata records that function and lists only
 sub-attesters whose nonces were adjusted. Unsupported values, empty strings,
 `null`, and non-string values return HTTP 400, even when no adjustment is needed.
 
+## Get available nonce adjustment functions
+
+Use `GET /ratsd/nonce-adjust-functions` to list the values accepted by the
+`nonce-adjust-function` field in `POST /ratsd/chares`. This endpoint returns
+`application/json` and does not require a nonce or any available sub-attesters.
+
+```console
+$ curl http://localhost:8895/ratsd/nonce-adjust-functions
+["shake-128","shake-256"]
+```
+
 ## Get available attesters
 Use endpoint `GET /ratsd/subattesters` to query all available leaf attesters and their available options. The usage can be found in the following
 ```console

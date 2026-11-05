@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/moogar0880/problems"
@@ -30,6 +31,11 @@ const (
 	v2CharesResponseMediaType        string = `application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2"`
 	legacyCMWCollectionType          string = "tag:github.com,2025:veraison/ratsd/cmw"
 )
+
+var supportedNonceAdjustFunctions = []string{
+	ratsdtoken.NonceAdjustFunctionShake128,
+	ratsdtoken.NonceAdjustFunctionShake256,
+}
 
 type Server struct {
 	logger  *zap.SugaredLogger
@@ -239,8 +245,7 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	if rawFunction, ok := requestFields["nonce-adjust-function"]; ok {
 		var requestedFunction string
 		if err := json.Unmarshal(rawFunction, &requestedFunction); err != nil ||
-			(requestedFunction != ratsdtoken.NonceAdjustFunctionShake128 &&
-				requestedFunction != ratsdtoken.NonceAdjustFunctionShake256) {
+			!slices.Contains(supportedNonceAdjustFunctions, requestedFunction) {
 			p := &problems.DefaultProblem{
 				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
 				Title:  string(InvalidRequest),
@@ -529,6 +534,12 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	w.Header().Set("Content-Type", resp.contentType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
+}
+
+func (server *Server) RatsdNonceAdjustFunctions(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", JsonType)
+	response.WriteHeader(http.StatusOK)
+	json.NewEncoder(response).Encode(supportedNonceAdjustFunctions)
 }
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
