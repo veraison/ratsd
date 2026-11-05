@@ -4,6 +4,32 @@ info:
   version: 0.0.1
 tags: []
 paths:
+  /.well-known/veraison/ratsd:
+    get:
+      description: Discover the daemon version, capabilities, available sub-attesters and their options, and API endpoints. Publicly accessible even when authentication is enabled.
+      operationId: Ratsd_discovery
+      security: []
+      responses:
+        '200':
+          description: The current discovery document, cacheable for 60 seconds.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: max-age=60
+            Expires:
+              schema:
+                type: string
+          content:
+            application/vnd.veraison.discovery+json:
+              schema:
+                $ref: '#/components/schemas/Discovery'
+        '500':
+          description: Unable to retrieve sub-attester capabilities.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /ratsd/chares:
     post:
       description: Challenge response API. Accepts a challenge and, upon success, generates the evidence in EAT w/ CMW format.
@@ -140,6 +166,49 @@ components:
         type: object
         additionalProperties:
           type: string
+    Discovery:
+      type: object
+      required:
+        - version
+        - service-state
+        - api-endpoints
+        - media-types
+        - nonce-adjust-functions
+        - subattesters
+      properties:
+        version:
+          type: string
+          description: Daemon build version.
+        service-state:
+          type: string
+          enum:
+            - READY
+          description: The daemon is ready to serve requests; this does not guarantee that individual attesters can collect evidence.
+        api-endpoints:
+          type: object
+          additionalProperties:
+            type: string
+          description: API operation names mapped to paths relative to the origin.
+          example:
+            chares: /ratsd/chares
+        media-types:
+          type: array
+          description: Supported response media types for POST /ratsd/chares, including profile parameters.
+          items:
+            type: string
+        nonce-adjust-functions:
+          type: array
+          description: Values accepted by the nonce-adjust-function request field, independent of the available sub-attesters.
+          items:
+            type: string
+          example:
+            - shake-128
+            - shake-256
+        subattesters:
+          type: array
+          description: Available sub-attesters and their request options; empty when none are loaded.
+          items:
+            $ref: '#/components/schemas/SubAttester'
     EAT:
       type: object
       required:

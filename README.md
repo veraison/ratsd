@@ -119,6 +119,50 @@ The response's nonce adjustment metadata records that function and lists only
 sub-attesters whose nonces were adjusted. Unsupported values, empty strings,
 `null`, and non-string values return HTTP 400, even when no adjustment is needed.
 
+## Discover capabilities
+
+Use `GET /.well-known/veraison/ratsd` to retrieve the daemon's capabilities in
+one request. The response uses `application/vnd.veraison.discovery+json` and
+includes the build version, service state, challenge-response endpoint,
+supported response media types, nonce adjustment functions, and available
+sub-attesters with their options.
+
+```console
+$ curl http://localhost:8895/.well-known/veraison/ratsd
+```
+
+For example, with the mock TSM attester loaded:
+
+```json
+{
+  "version": "1.0.3",
+  "service-state": "READY",
+  "api-endpoints": {
+    "chares": "/ratsd/chares"
+  },
+  "media-types": [
+    "application/eat-ucs+json; eat_profile=\"tag:github.com,2024:veraison/ratsd\"",
+    "application/cmw+cbor; cmwct=\"tag:github.com,2026:veraison/ratsd/v2\""
+  ],
+  "nonce-adjust-functions": ["shake-128", "shake-256"],
+  "subattesters": [
+    {
+      "name": "mock-tsm",
+      "options": [{"name": "privilege_level", "data-type": "string"}]
+    }
+  ]
+}
+```
+
+`READY` describes the daemon's ability to serve requests; individual attesters
+can still fail to collect evidence. With no loaded attesters, `subattesters` is
+an empty array and the other capabilities remain available. Responses include
+`Cache-Control: max-age=60` and `Expires` headers. This discovery endpoint is
+publicly accessible even when HTTP Basic authentication is enabled. Evidence
+collection and the individual discovery endpoints below continue to use the
+configured authentication backend. The individual discovery endpoints remain
+available for compatibility.
+
 ## Get available nonce adjustment functions
 
 Use `GET /ratsd/nonce-adjust-functions` to list the values accepted by the

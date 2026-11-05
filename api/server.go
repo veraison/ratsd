@@ -12,11 +12,13 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/moogar0880/problems"
 	"github.com/veraison/cmw"
 	ratsdtoken "github.com/veraison/ratsd-token"
 	ratsdtokenv2 "github.com/veraison/ratsd-token/v2"
+	"github.com/veraison/ratsd/config"
 	"github.com/veraison/ratsd/plugin"
 	"github.com/veraison/ratsd/proto/compositor"
 	"go.uber.org/zap"
@@ -30,6 +32,8 @@ const (
 	legacyCharesResponseMediaType    string = `application/eat-ucs+json; eat_profile="tag:github.com,2024:veraison/ratsd"`
 	v2CharesResponseMediaType        string = `application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2"`
 	legacyCMWCollectionType          string = "tag:github.com,2025:veraison/ratsd/cmw"
+	discoveryMediaType               string = "application/vnd.veraison.discovery+json"
+	discoveryCacheMaxAge                    = 60 * time.Second
 )
 
 var supportedNonceAdjustFunctions = []string{
@@ -542,30 +546,59 @@ func (server *Server) RatsdNonceAdjustFunctions(response http.ResponseWriter, re
 	json.NewEncoder(response).Encode(supportedNonceAdjustFunctions)
 }
 
+func (server *Server) RatsdDiscovery(response http.ResponseWriter, request *http.Request) {
+	attesters, err := server.subattesters()
+	if err != nil {
+		server.reportProblem(response, problems.NewDetailedProblem(http.StatusInternalServerError, err.Error()))
+		return
+	}
+
+	document := Discovery{
+		Version:              config.Version,
+		ServiceState:         READY,
+		ApiEndpoints:         map[string]string{"chares": "/ratsd/chares"},
+		MediaTypes:           []string{legacyCharesResponseMediaType, v2CharesResponseMediaType},
+		NonceAdjustFunctions: supportedNonceAdjustFunctions,
+		Subattesters:         attesters,
+	}
+	response.Header().Set("Content-Type", discoveryMediaType)
+	response.Header().Set("Cache-Control", fmt.Sprintf("max-age=%d", int64(discoveryCacheMaxAge.Seconds())))
+	response.Header().Set("Expires", time.Now().Add(discoveryCacheMaxAge).UTC().Format(http.TimeFormat))
+	response.WriteHeader(http.StatusOK)
+	json.NewEncoder(response).Encode(document)
+}
+
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
-	resp := []SubAttester{}
-
-	pl := s.manager.GetPluginList()
-	for _, pn := range pl {
-		options := new([]Option)
-		attester, err := s.manager.LookupByName(pn)
-		if err != nil {
-			errMsg := fmt.Sprintf(
-				"failed to get handle from %s: %s", pn, err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return
-		}
-
-		for _, o := range attester.GetOptions().Options {
-			option := Option{Name: o.Name, DataType: OptionDataType(o.Type)}
-			*options = append(*options, option)
-		}
-		entry := SubAttester{Name: pn, Options: options}
-		resp = append(resp, entry)
+	attesters, err := s.subattesters()
+	if err != nil {
+		s.reportProblem(w, problems.NewDetailedProblem(http.StatusInternalServerError, err.Error()))
+		return
 	}
 
 	w.Header().Set("Content-Type", JsonType)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(attesters)
+}
+
+func (server *Server) subattesters() ([]SubAttester, error) {
+	attesters := []SubAttester{}
+	for _, name := range server.manager.GetPluginList() {
+		options := []Option{}
+		attester, err := server.manager.LookupByName(name)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get handle from %s: %w", name, err)
+		}
+
+		availableOptions := attester.GetOptions()
+		if !availableOptions.GetStatus().GetResult() {
+			return nil, fmt.Errorf("failed to get options from %s: %s", name, availableOptions.GetStatus().GetError())
+		}
+		for _, availableOption := range availableOptions.Options {
+			option := Option{Name: availableOption.Name, DataType: OptionDataType(availableOption.Type)}
+			options = append(options, option)
+		}
+		attesters = append(attesters, SubAttester{Name: name, Options: &options})
+	}
+
+	return attesters, nil
 }
