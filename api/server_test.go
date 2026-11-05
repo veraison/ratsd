@@ -134,6 +134,44 @@ func (t *testAttester) GetSupportedFormats() *compositor.SupportedFormatsOut {
 	}
 }
 
+func TestRatsdNonceAdjustFunctions(t *testing.T) {
+	for _, options := range []string{"all", "selected"} {
+		t.Run(options, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			manager := mock_deps.NewMockIManager(ctrl)
+			server := NewServer(log.Named("test"), manager, options)
+			middlewareCalled := false
+			handler := HandlerWithOptions(server, StdHTTPServerOptions{
+				Middlewares: []MiddlewareFunc{
+					func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+							middlewareCalled = true
+							next.ServeHTTP(response, request)
+						})
+					},
+				},
+			})
+			request := httptest.NewRequest(http.MethodGet, "/ratsd/nonce-adjust-functions", nil)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+
+			require.Equal(t, http.StatusOK, response.Code)
+			assert.True(t, middlewareCalled)
+			assert.Equal(t, jsonType, response.Header().Get("Content-Type"))
+			var functions []string
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &functions))
+			assert.Equal(t, []string{"shake-128", "shake-256"}, functions)
+			assert.Contains(t, functions, defaultNonceAdjustFunction)
+
+			spec, err := GetSpec()
+			require.NoError(t, err)
+			require.NotNil(t, spec.Paths.Find("/ratsd/nonce-adjust-functions"))
+			assert.NotNil(t, spec.Paths.Find("/ratsd/nonce-adjust-functions").Get)
+			assert.ElementsMatch(t, spec.Components.Schemas["ChaResRequest"].Value.Properties["nonce-adjust-function"].Value.Enum, functions)
+		})
+	}
+}
+
 func TestRatsdSubattesters_valid_requests(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -390,7 +428,6 @@ func TestRatsdChares_valid_request(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
-	adjustedNonce := adjustNonceForTest(t, realNonce, 64)
 
 	tests := []struct {
 		name, query string
@@ -444,8 +481,8 @@ func TestRatsdChares_valid_request(t *testing.T) {
 				assert.Equal(t, 1, nonce.Len())
 				assert.Equal(t, realNonce, nonce.GetI(0))
 			}
-			assert.Equal(t, ratsdtoken.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
-			assert.Equal(t, map[string]uint{"mock-tsm": 64}, claims.GetNonceAdjustMap())
+			assert.Empty(t, claims.GetNonceAdjustFn())
+			assert.Nil(t, claims.GetNonceAdjustMap())
 
 			collection := claims.GetCMW()
 			if !assert.NotNil(t, collection) {
@@ -465,7 +502,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
 			expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", tt.privlevel,
-				hex.EncodeToString(adjustedNonce))
+				hex.EncodeToString(realNonce))
 			assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 		})
 	}
@@ -488,7 +525,6 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
-	adjustedNonce := adjustNonceForTest(t, realNonce, 64)
 
 	w := httptest.NewRecorder()
 	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
@@ -510,8 +546,8 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterOEMID, claims.GetOEMID())
 	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterSWName, claims.GetSWName())
 	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterSWVersion, claims.GetSWVersion())
-	assert.Equal(t, ratsdtokenv2.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
-	assert.Equal(t, map[string]uint{"mock-tsm": 64}, claims.GetNonceAdjustMap())
+	assert.Empty(t, claims.GetNonceAdjustFn())
+	assert.Nil(t, claims.GetNonceAdjustMap())
 	assert.Equal(t, []byte{0}, signature)
 
 	collectionType, err := collection.GetCollectionType()
@@ -530,8 +566,184 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
 	expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", 1,
-		hex.EncodeToString(adjustedNonce))
+		hex.EncodeToString(realNonce))
 	assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
+}
+
+func TestRatsdChares_mixedNonceSizes(t *testing.T) {
+	realNonce, err := base64.RawURLEncoding.DecodeString(validNonce)
+	require.NoError(t, err)
+	require.Len(t, realNonce, 64)
+
+	for _, responseType := range []string{legacyCharesResponseMediaType, v2CharesResponseMediaType} {
+		for _, pluginList := range [][]string{
+			{"matching", "smaller", "larger"},
+			{"larger", "smaller", "matching"},
+		} {
+			t.Run(responseType+"/"+strings.Join(pluginList, "/"), func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				dm := mock_deps.NewMockIManager(ctrl)
+				dm.EXPECT().GetPluginList().Return(pluginList)
+
+				for _, attesterCase := range []struct {
+					name          string
+					nonceSize     uint32
+					expectedNonce []byte
+				}{
+					{"matching", 64, realNonce},
+					{"smaller", 32, adjustNonceForTest(t, realNonce, 32)},
+					{"larger", 96, adjustNonceForTest(t, realNonce, 96)},
+				} {
+					contentType := "application/vnd.veraison.test-selected"
+					attester := &testAttester{
+						t: t,
+						formats: []*compositor.Format{
+							{ContentType: "application/vnd.veraison.test-default", NonceSize: 16},
+							{ContentType: contentType, NonceSize: attesterCase.nonceSize},
+						},
+						expectedContentType: contentType,
+						expectedNonce:       attesterCase.expectedNonce,
+						evidence:            []byte("evidence"),
+					}
+					dm.EXPECT().LookupByName(attesterCase.name).Return(attester, nil)
+				}
+
+				server := NewServer(log.Named("test"), dm, "all")
+				response := httptest.NewRecorder()
+				body := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+					"matching":{"content-type":"application/vnd.veraison.test-selected"},
+					"smaller":{"content-type":"application/vnd.veraison.test-selected"},
+					"larger":{"content-type":"application/vnd.veraison.test-selected"}}`, validNonce))
+				request := httptest.NewRequest(http.MethodPost, "/ratsd/chares", body)
+				request.Header.Set("Content-Type", ApplicationvndVeraisonCharesJson)
+				server.RatsdChares(response, request, RatsdCharesParams{Accept: &responseType})
+
+				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				assert.Equal(t, responseType, response.Result().Header.Get("Content-Type"))
+				expectedMap := map[string]uint{"smaller": 32, "larger": 96}
+				if responseType == v2CharesResponseMediaType {
+					claims, _, _ := decodeCharesV2(t, response.Body.Bytes())
+					assert.Equal(t, realNonce, claims.GetEatNonce())
+					assert.Equal(t, ratsdtokenv2.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+					assert.Equal(t, expectedMap, claims.GetNonceAdjustMap())
+				} else {
+					claims := decodeCharesClaims(t, response.Body.Bytes())
+					require.NotNil(t, claims.GetEatNonce())
+					assert.Equal(t, realNonce, claims.GetEatNonce().GetI(0))
+					assert.Equal(t, ratsdtoken.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+					assert.Equal(t, expectedMap, claims.GetNonceAdjustMap())
+				}
+			})
+		}
+	}
+}
+
+func TestRatsdChares_nonceAdjustFunction(t *testing.T) {
+	realNonce, err := base64.RawURLEncoding.DecodeString(validNonce)
+	require.NoError(t, err)
+
+	for _, responseType := range []string{legacyCharesResponseMediaType, v2CharesResponseMediaType} {
+		for _, nonceSize := range []uint32{32, 64, 96} {
+			for _, requestedFunction := range []string{"shake-256", "shake-128", ""} {
+				t.Run(fmt.Sprintf("%s/%d/%s", responseType, nonceSize, requestedFunction), func(t *testing.T) {
+					expectedFunction := requestedFunction
+					if expectedFunction == "" {
+						expectedFunction = "shake-256"
+					}
+					expectedNonce := realNonce
+					if int(nonceSize) != len(realNonce) {
+						if expectedFunction == "shake-128" {
+							expectedNonce = sha3.SumSHAKE128(realNonce, int(nonceSize))
+						} else {
+							expectedNonce = sha3.SumSHAKE256(realNonce, int(nonceSize))
+						}
+					}
+
+					ctrl := gomock.NewController(t)
+					dm := mock_deps.NewMockIManager(ctrl)
+					attesterName := "format-attester"
+					contentType := "application/vnd.veraison.test-selected"
+					attester := &testAttester{
+						t: t,
+						formats: []*compositor.Format{
+							{ContentType: "application/vnd.veraison.test-default", NonceSize: 16},
+							{ContentType: contentType, NonceSize: nonceSize},
+						},
+						expectedContentType: contentType,
+						expectedNonce:       expectedNonce,
+						evidence:            []byte("evidence"),
+					}
+					dm.EXPECT().GetPluginList().Return([]string{attesterName})
+					dm.EXPECT().LookupByName(attesterName).Return(attester, nil)
+
+					requestFields := map[string]interface{}{
+						"nonce":              validNonce,
+						"attester-selection": []string{attesterName},
+						attesterName:         map[string]string{"content-type": contentType},
+					}
+					if requestedFunction != "" {
+						requestFields["nonce-adjust-function"] = requestedFunction
+					}
+					body, err := json.Marshal(requestFields)
+					require.NoError(t, err)
+					var requestBody ChaResRequest
+					require.NoError(t, json.Unmarshal(body, &requestBody))
+					roundTripBody, err := json.Marshal(requestBody)
+					require.NoError(t, err)
+					assert.JSONEq(t, string(body), string(roundTripBody))
+					request := httptest.NewRequest(http.MethodPost, "/ratsd/chares", strings.NewReader(string(roundTripBody)))
+					request.Header.Set("Content-Type", ApplicationvndVeraisonCharesJson)
+					response := httptest.NewRecorder()
+					server := NewServer(log.Named("test"), dm, "selected")
+					server.RatsdChares(response, request, RatsdCharesParams{Accept: &responseType})
+
+					require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+					var expectedMap map[string]uint
+					if int(nonceSize) == len(realNonce) {
+						expectedFunction = ""
+					} else {
+						expectedMap = map[string]uint{attesterName: uint(nonceSize)}
+					}
+					if responseType == v2CharesResponseMediaType {
+						claims, _, _ := decodeCharesV2(t, response.Body.Bytes())
+						assert.Equal(t, realNonce, claims.GetEatNonce())
+						assert.Equal(t, expectedFunction, claims.GetNonceAdjustFn())
+						assert.Equal(t, expectedMap, claims.GetNonceAdjustMap())
+					} else {
+						claims := decodeCharesClaims(t, response.Body.Bytes())
+						require.NotNil(t, claims.GetEatNonce())
+						assert.Equal(t, realNonce, claims.GetEatNonce().GetI(0))
+						assert.Equal(t, expectedFunction, claims.GetNonceAdjustFn())
+						assert.Equal(t, expectedMap, claims.GetNonceAdjustMap())
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestRatsdChares_invalidNonceAdjustFunction(t *testing.T) {
+	for _, responseType := range []string{legacyCharesResponseMediaType, v2CharesResponseMediaType} {
+		for _, invalidFunction := range []string{`"shake-512"`, `"SHAKE256"`, `""`, `null`, `256`, `true`, `[]`, `{}`} {
+			t.Run(responseType+"/"+invalidFunction, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				dm := mock_deps.NewMockIManager(ctrl)
+				server := NewServer(log.Named("test"), dm, "all")
+				body := fmt.Sprintf(`{"nonce": %q, "nonce-adjust-function": %s}`, validNonce, invalidFunction)
+				request := httptest.NewRequest(http.MethodPost, "/ratsd/chares", strings.NewReader(body))
+				request.Header.Set("Content-Type", ApplicationvndVeraisonCharesJson)
+				response := httptest.NewRecorder()
+				server.RatsdChares(response, request, RatsdCharesParams{Accept: &responseType})
+
+				require.Equal(t, http.StatusBadRequest, response.Code)
+				assert.Equal(t, problems.ProblemMediaType, response.Result().Header.Get("Content-Type"))
+				var problem problems.DefaultProblem
+				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &problem))
+				assert.Equal(t, string(TagGithubCom2024VeraisonratsdErrorInvalidrequest), problem.Type)
+				assert.Equal(t, `nonce-adjust-function must be "shake-128" or "shake-256"`, problem.Detail)
+			})
+		}
+	}
 }
 
 func TestRatsdChares_adjustsNonceToSelectedFormatSize(t *testing.T) {

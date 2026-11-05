@@ -101,6 +101,35 @@ By default, ratsd core listens on port 8895. Use `POST /ratsd/chares` to retriev
 $ curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/vnd.veraison.chares+json" -d '{"nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA"}' 
 {"cmw":"eyJfX2Ntd2NfdCI6InRhZzpnaXRodWIuY29tLDIwMjU6dmVyYWlzb24vcmF0c2QvY213IiwibW9jay10c20iOlsiYXBwbGljYXRpb24vdm5kLnZlcmFpc29uLmNvbmZpZ2ZzLXRzbStqc29uIiwiZXlKaGRYaGliRzlpSWpvaVdWaFdORmx0ZUhaWlp5SXNJbTkxZEdKc2IySWlPaUpqU0Vwd1pHMTRiR1J0Vm5OUGFVRjNRMjFzZFZsdGVIWlphbTluVGtkUk1FOVVVVEJPUkVrd1dsUlJORTE2U1hwUFJGazFUbXByTWxwcVdUVk9lazB5V1ZSVmQwNTZhek5QUkdNMFRucG5NMDlFWXpST2VtY3pUMFJqTkU1Nlp6TlBSR00wVG5wbk0wOUVZelJPZW1jelQwUlNhMDVFYXpCT1JGRjVUa2RWTUU5RVRYbE5lbWN5VDFSWk5VNXRXVEpQVkdONlRtMUZNVTFFWXpWT2VtY3pUMFJqTkU1Nlp6TlBSR00wVG5wbk0wOUVZelJPZW1jelQwUmpORTU2WnpOUFJHTTBUbnBuSWl3aWNISnZkbWxrWlhJaU9pSm1ZV3RsWEc0aWZRIl19","eat_nonce":"TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA","eat_profile":"tag:github.com,2024:veraison/ratsd"}
 ```
+Each sub-attester receives the original decoded nonce when its length matches
+the nonce size required by the selected evidence format. Otherwise, ratsd uses
+SHAKE256 by default to produce a nonce of the required size. Set the optional
+top-level `nonce-adjust-function` field to `"shake-128"` or `"shake-256"` to choose
+the function for that request. For example:
+
+```json
+{
+  "nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA",
+  "nonce-adjust-function": "shake-128"
+}
+```
+
+The chosen function applies to all attesters that require nonce adjustment.
+The response's nonce adjustment metadata records that function and lists only
+sub-attesters whose nonces were adjusted. Unsupported values, empty strings,
+`null`, and non-string values return HTTP 400, even when no adjustment is needed.
+
+## Get available nonce adjustment functions
+
+Use `GET /ratsd/nonce-adjust-functions` to list the values accepted by the
+`nonce-adjust-function` field in `POST /ratsd/chares`. This endpoint returns
+`application/json` and does not require a nonce or any available sub-attesters.
+
+```console
+$ curl http://localhost:8895/ratsd/nonce-adjust-functions
+["shake-128","shake-256"]
+```
+
 ## Get available attesters
 Use endpoint `GET /ratsd/subattesters` to query all available leaf attesters and their available options. The usage can be found in the following
 ```console

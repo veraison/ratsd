@@ -88,6 +88,24 @@ func (e CMWTyp) Valid() bool {
 	}
 }
 
+// Defines values for ChaResRequestNonceAdjustFunction.
+const (
+	Shake128 ChaResRequestNonceAdjustFunction = "shake-128"
+	Shake256 ChaResRequestNonceAdjustFunction = "shake-256"
+)
+
+// Valid indicates whether the value is a known member of the ChaResRequestNonceAdjustFunction enum.
+func (e ChaResRequestNonceAdjustFunction) Valid() bool {
+	switch e {
+	case Shake128:
+		return true
+	case Shake256:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EATEatProfile.
 const (
 	TagGithubCom2024Veraisonratsd EATEatProfile = "tag:github.com,2024:veraison/ratsd"
@@ -207,10 +225,16 @@ type CMWTyp string
 
 // ChaResRequest defines model for ChaResRequest.
 type ChaResRequest struct {
-	AttesterSelection    *[]string                    `json:"attester-selection,omitempty"`
-	Nonce                string                       `json:"nonce"`
-	AdditionalProperties map[string]map[string]string `json:"-"`
+	AttesterSelection *[]string `json:"attester-selection,omitempty"`
+	Nonce             string    `json:"nonce"`
+
+	// NonceAdjustFunction Function used when an attester's required nonce size differs from the input nonce size. Matching-size nonces are passed through unchanged.
+	NonceAdjustFunction  *ChaResRequestNonceAdjustFunction `json:"nonce-adjust-function,omitempty"`
+	AdditionalProperties map[string]map[string]string      `json:"-"`
 }
+
+// ChaResRequestNonceAdjustFunction Function used when an attester's required nonce size differs from the input nonce size. Matching-size nonces are passed through unchanged.
+type ChaResRequestNonceAdjustFunction string
 
 // EAT defines model for EAT.
 type EAT struct {
@@ -309,6 +333,14 @@ func (a *ChaResRequest) UnmarshalJSON(b []byte) error {
 		delete(object, "nonce")
 	}
 
+	if raw, found := object["nonce-adjust-function"]; found {
+		err = json.Unmarshal(raw, &a.NonceAdjustFunction)
+		if err != nil {
+			return fmt.Errorf("error reading 'nonce-adjust-function': %w", err)
+		}
+		delete(object, "nonce-adjust-function")
+	}
+
 	if len(object) != 0 {
 		a.AdditionalProperties = make(map[string]map[string]string)
 		for fieldName, fieldBuf := range object {
@@ -340,6 +372,13 @@ func (a ChaResRequest) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error marshaling 'nonce': %w", err)
 	}
 
+	if a.NonceAdjustFunction != nil {
+		object["nonce-adjust-function"], err = json.Marshal(a.NonceAdjustFunction)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'nonce-adjust-function': %w", err)
+		}
+	}
+
 	for fieldName, field := range a.AdditionalProperties {
 		object[fieldName], err = json.Marshal(field)
 		if err != nil {
@@ -354,6 +393,9 @@ type ServerInterface interface {
 
 	// (POST /ratsd/chares)
 	RatsdChares(w http.ResponseWriter, r *http.Request, params RatsdCharesParams)
+
+	// (GET /ratsd/nonce-adjust-functions)
+	RatsdNonceAdjustFunctions(w http.ResponseWriter, r *http.Request)
 
 	// (GET /ratsd/subattesters)
 	RatsdSubattesters(w http.ResponseWriter, r *http.Request)
@@ -406,6 +448,20 @@ func (siw *ServerInterfaceWrapper) RatsdChares(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RatsdChares(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RatsdNonceAdjustFunctions operation middleware
+func (siw *ServerInterfaceWrapper) RatsdNonceAdjustFunctions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RatsdNonceAdjustFunctions(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -550,6 +606,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/ratsd/chares", wrapper.RatsdChares)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ratsd/nonce-adjust-functions", wrapper.RatsdNonceAdjustFunctions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ratsd/subattesters", wrapper.RatsdSubattesters)
 
 	return m
@@ -560,23 +617,27 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

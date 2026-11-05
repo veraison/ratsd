@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/moogar0880/problems"
@@ -25,11 +26,16 @@ import (
 const (
 	ApplicationvndVeraisonCharesJson string = "application/vnd.veraison.chares+json"
 	JsonType                         string = "application/json"
-	nonceAdjustFunction              string = ratsdtoken.NonceAdjustFunctionShake256
+	defaultNonceAdjustFunction       string = ratsdtoken.NonceAdjustFunctionShake256
 	legacyCharesResponseMediaType    string = `application/eat-ucs+json; eat_profile="tag:github.com,2024:veraison/ratsd"`
 	v2CharesResponseMediaType        string = `application/cmw+cbor; cmwct="tag:github.com,2026:veraison/ratsd/v2"`
 	legacyCMWCollectionType          string = "tag:github.com,2025:veraison/ratsd/cmw"
 )
+
+var supportedNonceAdjustFunctions = []string{
+	ratsdtoken.NonceAdjustFunctionShake128,
+	ratsdtoken.NonceAdjustFunctionShake256,
+}
 
 type Server struct {
 	logger  *zap.SugaredLogger
@@ -61,11 +67,7 @@ func responseCodeToHTTP(responseCode uint32) int {
 	}
 }
 
-func adjustNonce(nonce []byte, size uint32) ([]byte, error) {
-	return adjustNonceWithFunction(nonce, size, nonceAdjustFunction)
-}
-
-func adjustNonceWithFunction(nonce []byte, size uint32, function string) ([]byte, error) {
+func adjustNonce(nonce []byte, size uint32, function string) ([]byte, error) {
 	if size == 0 {
 		return nil, fmt.Errorf("nonce size must be greater than zero")
 	}
@@ -239,6 +241,24 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	}
 	delete(requestFields, "nonce")
 
+	nonceAdjustFunction := defaultNonceAdjustFunction
+	if rawFunction, ok := requestFields["nonce-adjust-function"]; ok {
+		var requestedFunction string
+		if err := json.Unmarshal(rawFunction, &requestedFunction); err != nil ||
+			!slices.Contains(supportedNonceAdjustFunctions, requestedFunction) {
+			p := &problems.DefaultProblem{
+				Type:   string(TagGithubCom2024VeraisonratsdErrorInvalidrequest),
+				Title:  string(InvalidRequest),
+				Detail: `nonce-adjust-function must be "shake-128" or "shake-256"`,
+				Status: http.StatusBadRequest,
+			}
+			s.reportProblem(w, p)
+			return
+		}
+		nonceAdjustFunction = requestedFunction
+		delete(requestFields, "nonce-adjust-function")
+	}
+
 	selectedAttesters := []string{}
 	hasSelection := false
 	if rawSelection, ok := requestFields["attester-selection"]; ok {
@@ -390,37 +410,40 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 
 		s.logger.Info(pn, " output content type: ", outputCt)
-		attesterNonce, err := adjustNonce(nonce, selectedFormat.NonceSize)
-		if err != nil {
-			errMsg := fmt.Sprintf(
-				"failed to adjust nonce for attester %s: %s", pn, err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
-		}
+		attesterNonce := nonce
+		if len(nonce) != int(selectedFormat.NonceSize) {
+			attesterNonce, err = adjustNonce(nonce, selectedFormat.NonceSize, nonceAdjustFunction)
+			if err != nil {
+				errMsg := fmt.Sprintf(
+					"failed to adjust nonce for attester %s: %s", pn, err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
 
-		if resp.format == charesResponseV2 {
-			err = v2Evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
-		} else {
-			err = legacyEvidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
-		}
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
-		}
+			if resp.format == charesResponseV2 {
+				err = v2Evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+			} else {
+				err = legacyEvidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+			}
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
 
-		if resp.format == charesResponseV2 {
-			err = v2Evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
-		} else {
-			err = legacyEvidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
-		}
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
+			if resp.format == charesResponseV2 {
+				err = v2Evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
+			} else {
+				err = legacyEvidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
+			}
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
 		}
 
 		in := &compositor.EvidenceIn{
@@ -511,6 +534,12 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 	w.Header().Set("Content-Type", resp.contentType)
 	w.WriteHeader(http.StatusOK)
 	w.Write(response)
+}
+
+func (server *Server) RatsdNonceAdjustFunctions(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", JsonType)
+	response.WriteHeader(http.StatusOK)
+	json.NewEncoder(response).Encode(supportedNonceAdjustFunctions)
 }
 
 func (s *Server) RatsdSubattesters(w http.ResponseWriter, r *http.Request) {
