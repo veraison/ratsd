@@ -390,37 +390,40 @@ func (s *Server) RatsdChares(w http.ResponseWriter, r *http.Request, param Ratsd
 		}
 
 		s.logger.Info(pn, " output content type: ", outputCt)
-		attesterNonce, err := adjustNonce(nonce, selectedFormat.NonceSize)
-		if err != nil {
-			errMsg := fmt.Sprintf(
-				"failed to adjust nonce for attester %s: %s", pn, err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
-		}
+		attesterNonce := nonce
+		if len(nonce) != int(selectedFormat.NonceSize) {
+			attesterNonce, err = adjustNonce(nonce, selectedFormat.NonceSize)
+			if err != nil {
+				errMsg := fmt.Sprintf(
+					"failed to adjust nonce for attester %s: %s", pn, err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
 
-		if resp.format == charesResponseV2 {
-			err = v2Evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
-		} else {
-			err = legacyEvidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
-		}
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
-		}
+			if resp.format == charesResponseV2 {
+				err = v2Evidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+			} else {
+				err = legacyEvidence.Claims.SetNonceAdjustFn(nonceAdjustFunction)
+			}
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to set nonce adjustment function: %s", err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
 
-		if resp.format == charesResponseV2 {
-			err = v2Evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
-		} else {
-			err = legacyEvidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
-		}
-		if err != nil {
-			errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
-			p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
-			s.reportProblem(w, p)
-			return false
+			if resp.format == charesResponseV2 {
+				err = v2Evidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
+			} else {
+				err = legacyEvidence.Claims.SetKeyandNonceSz(pn, uint(selectedFormat.NonceSize))
+			}
+			if err != nil {
+				errMsg := fmt.Sprintf("failed to set nonce adjustment map: %s", err.Error())
+				p := problems.NewDetailedProblem(http.StatusInternalServerError, errMsg)
+				s.reportProblem(w, p)
+				return false
+			}
 		}
 
 		in := &compositor.EvidenceIn{

@@ -390,7 +390,6 @@ func TestRatsdChares_valid_request(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
-	adjustedNonce := adjustNonceForTest(t, realNonce, 64)
 
 	tests := []struct {
 		name, query string
@@ -444,8 +443,8 @@ func TestRatsdChares_valid_request(t *testing.T) {
 				assert.Equal(t, 1, nonce.Len())
 				assert.Equal(t, realNonce, nonce.GetI(0))
 			}
-			assert.Equal(t, ratsdtoken.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
-			assert.Equal(t, map[string]uint{"mock-tsm": 64}, claims.GetNonceAdjustMap())
+			assert.Empty(t, claims.GetNonceAdjustFn())
+			assert.Nil(t, claims.GetNonceAdjustMap())
 
 			collection := claims.GetCMW()
 			if !assert.NotNil(t, collection) {
@@ -465,7 +464,7 @@ func TestRatsdChares_valid_request(t *testing.T) {
 			assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
 			expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", tt.privlevel,
-				hex.EncodeToString(adjustedNonce))
+				hex.EncodeToString(realNonce))
 			assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
 		})
 	}
@@ -488,7 +487,6 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 
 	s := NewServer(logger, dm, "all")
 	realNonce, _ := base64.RawURLEncoding.DecodeString(validNonce)
-	adjustedNonce := adjustNonceForTest(t, realNonce, 64)
 
 	w := httptest.NewRecorder()
 	rb := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
@@ -510,8 +508,8 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterOEMID, claims.GetOEMID())
 	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterSWName, claims.GetSWName())
 	assert.Equal(t, ratsdtokenv2.DefaultLeadAttesterSWVersion, claims.GetSWVersion())
-	assert.Equal(t, ratsdtokenv2.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
-	assert.Equal(t, map[string]uint{"mock-tsm": 64}, claims.GetNonceAdjustMap())
+	assert.Empty(t, claims.GetNonceAdjustFn())
+	assert.Nil(t, claims.GetNonceAdjustMap())
 	assert.Equal(t, []byte{0}, signature)
 
 	collectionType, err := collection.GetCollectionType()
@@ -530,8 +528,76 @@ func TestRatsdChares_valid_request_v2(t *testing.T) {
 	assert.Equal(t, tokens.BinaryString("auxblob"), tsmout.AuxBlob)
 
 	expectedOutblob := fmt.Sprintf("privlevel: %d\ninblob: %s", 1,
-		hex.EncodeToString(adjustedNonce))
+		hex.EncodeToString(realNonce))
 	assert.Equal(t, tokens.BinaryString(expectedOutblob), tsmout.OutBlob)
+}
+
+func TestRatsdChares_mixedNonceSizes(t *testing.T) {
+	realNonce, err := base64.RawURLEncoding.DecodeString(validNonce)
+	require.NoError(t, err)
+	require.Len(t, realNonce, 64)
+
+	for _, responseType := range []string{legacyCharesResponseMediaType, v2CharesResponseMediaType} {
+		for _, pluginList := range [][]string{
+			{"matching", "smaller", "larger"},
+			{"larger", "smaller", "matching"},
+		} {
+			t.Run(responseType+"/"+strings.Join(pluginList, "/"), func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				dm := mock_deps.NewMockIManager(ctrl)
+				dm.EXPECT().GetPluginList().Return(pluginList)
+
+				for _, attesterCase := range []struct {
+					name          string
+					nonceSize     uint32
+					expectedNonce []byte
+				}{
+					{"matching", 64, realNonce},
+					{"smaller", 32, adjustNonceForTest(t, realNonce, 32)},
+					{"larger", 96, adjustNonceForTest(t, realNonce, 96)},
+				} {
+					contentType := "application/vnd.veraison.test-selected"
+					attester := &testAttester{
+						t: t,
+						formats: []*compositor.Format{
+							{ContentType: "application/vnd.veraison.test-default", NonceSize: 16},
+							{ContentType: contentType, NonceSize: attesterCase.nonceSize},
+						},
+						expectedContentType: contentType,
+						expectedNonce:       attesterCase.expectedNonce,
+						evidence:            []byte("evidence"),
+					}
+					dm.EXPECT().LookupByName(attesterCase.name).Return(attester, nil)
+				}
+
+				server := NewServer(log.Named("test"), dm, "all")
+				response := httptest.NewRecorder()
+				body := strings.NewReader(fmt.Sprintf(`{"nonce": "%s",
+					"matching":{"content-type":"application/vnd.veraison.test-selected"},
+					"smaller":{"content-type":"application/vnd.veraison.test-selected"},
+					"larger":{"content-type":"application/vnd.veraison.test-selected"}}`, validNonce))
+				request := httptest.NewRequest(http.MethodPost, "/ratsd/chares", body)
+				request.Header.Set("Content-Type", ApplicationvndVeraisonCharesJson)
+				server.RatsdChares(response, request, RatsdCharesParams{Accept: &responseType})
+
+				require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+				assert.Equal(t, responseType, response.Result().Header.Get("Content-Type"))
+				expectedMap := map[string]uint{"smaller": 32, "larger": 96}
+				if responseType == v2CharesResponseMediaType {
+					claims, _, _ := decodeCharesV2(t, response.Body.Bytes())
+					assert.Equal(t, realNonce, claims.GetEatNonce())
+					assert.Equal(t, ratsdtokenv2.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+					assert.Equal(t, expectedMap, claims.GetNonceAdjustMap())
+				} else {
+					claims := decodeCharesClaims(t, response.Body.Bytes())
+					require.NotNil(t, claims.GetEatNonce())
+					assert.Equal(t, realNonce, claims.GetEatNonce().GetI(0))
+					assert.Equal(t, ratsdtoken.NonceAdjustFunctionShake256, claims.GetNonceAdjustFn())
+					assert.Equal(t, expectedMap, claims.GetNonceAdjustMap())
+				}
+			})
+		}
+	}
 }
 
 func TestRatsdChares_adjustsNonceToSelectedFormatSize(t *testing.T) {
