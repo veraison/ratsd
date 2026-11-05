@@ -108,6 +108,13 @@ components:
         nonce:
           type: string
           format: base64url
+        nonce-adjust-function:
+          type: string
+          enum:
+            - shake-128
+            - shake-256
+          default: shake-256
+          description: Function used when an attester's required nonce size differs from the input nonce size. Matching-size nonces are passed through unchanged.
         attester-selection:
           type: array
           items:

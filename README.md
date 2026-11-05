@@ -103,8 +103,21 @@ $ curl -X POST http://localhost:8895/ratsd/chares -H "Content-type: application/
 ```
 Each sub-attester receives the original decoded nonce when its length matches
 the nonce size required by the selected evidence format. Otherwise, ratsd uses
-SHAKE256 to produce a nonce of the required size. The response's nonce adjustment
-metadata lists only sub-attesters whose nonces were adjusted.
+SHAKE256 by default to produce a nonce of the required size. Set the optional
+top-level `nonce-adjust-function` field to `"shake-128"` or `"shake-256"` to choose
+the function for that request. For example:
+
+```json
+{
+  "nonce": "TUlEQk5IMjhpaW9pc2pQeXh4eHh4eHh4eHh4eHh4eHhNSURCTkgyOGlpb2lzalB5eHh4eHh4eHh4eHh4eHh4eA",
+  "nonce-adjust-function": "shake-128"
+}
+```
+
+The chosen function applies to all attesters that require nonce adjustment.
+The response's nonce adjustment metadata records that function and lists only
+sub-attesters whose nonces were adjusted. Unsupported values, empty strings,
+`null`, and non-string values return HTTP 400, even when no adjustment is needed.
 
 ## Get available attesters
 Use endpoint `GET /ratsd/subattesters` to query all available leaf attesters and their available options. The usage can be found in the following

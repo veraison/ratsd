@@ -88,6 +88,24 @@ func (e CMWTyp) Valid() bool {
 	}
 }
 
+// Defines values for ChaResRequestNonceAdjustFunction.
+const (
+	Shake128 ChaResRequestNonceAdjustFunction = "shake-128"
+	Shake256 ChaResRequestNonceAdjustFunction = "shake-256"
+)
+
+// Valid indicates whether the value is a known member of the ChaResRequestNonceAdjustFunction enum.
+func (e ChaResRequestNonceAdjustFunction) Valid() bool {
+	switch e {
+	case Shake128:
+		return true
+	case Shake256:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EATEatProfile.
 const (
 	TagGithubCom2024Veraisonratsd EATEatProfile = "tag:github.com,2024:veraison/ratsd"
@@ -207,10 +225,16 @@ type CMWTyp string
 
 // ChaResRequest defines model for ChaResRequest.
 type ChaResRequest struct {
-	AttesterSelection    *[]string                    `json:"attester-selection,omitempty"`
-	Nonce                string                       `json:"nonce"`
-	AdditionalProperties map[string]map[string]string `json:"-"`
+	AttesterSelection *[]string `json:"attester-selection,omitempty"`
+	Nonce             string    `json:"nonce"`
+
+	// NonceAdjustFunction Function used when an attester's required nonce size differs from the input nonce size. Matching-size nonces are passed through unchanged.
+	NonceAdjustFunction  *ChaResRequestNonceAdjustFunction `json:"nonce-adjust-function,omitempty"`
+	AdditionalProperties map[string]map[string]string      `json:"-"`
 }
+
+// ChaResRequestNonceAdjustFunction Function used when an attester's required nonce size differs from the input nonce size. Matching-size nonces are passed through unchanged.
+type ChaResRequestNonceAdjustFunction string
 
 // EAT defines model for EAT.
 type EAT struct {
@@ -309,6 +333,14 @@ func (a *ChaResRequest) UnmarshalJSON(b []byte) error {
 		delete(object, "nonce")
 	}
 
+	if raw, found := object["nonce-adjust-function"]; found {
+		err = json.Unmarshal(raw, &a.NonceAdjustFunction)
+		if err != nil {
+			return fmt.Errorf("error reading 'nonce-adjust-function': %w", err)
+		}
+		delete(object, "nonce-adjust-function")
+	}
+
 	if len(object) != 0 {
 		a.AdditionalProperties = make(map[string]map[string]string)
 		for fieldName, fieldBuf := range object {
@@ -338,6 +370,13 @@ func (a ChaResRequest) MarshalJSON() ([]byte, error) {
 	object["nonce"], err = json.Marshal(a.Nonce)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'nonce': %w", err)
+	}
+
+	if a.NonceAdjustFunction != nil {
+		object["nonce-adjust-function"], err = json.Marshal(a.NonceAdjustFunction)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'nonce-adjust-function': %w", err)
+		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
@@ -560,23 +599,26 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"tFbfb+M2DP5XBG1vc5y0K+7Bhz2kXTHcw2FF2+EeesVAS2ysmy15FJ1eVuR/HyTbjZ06/XG461NjUeTH",
-	"j+RHPUjlqtpZtOxl9iBrIKiQkeKvswIu0V/ivw16vng8SkEprDlYGCszWSBoJJlICxXKTHbHifSqwAqC",
-	"HW/qcOKZjF3J7XbbH8Y4p6C7IOdEjiIQcjUSG4wGGhlMOeEokcZ6Bqtw8tAzcBM9oG0qmd2cLBa3SW9n",
-	"mypHCnZsuMSBmTR2DaXRglpYcndp57z9sLvDsMpWhosmT5WrkuPF8Um2RgLjnZ0TsNcZhvSyzvlh39tE",
-	"hkNDqKPjcNqDfExqd83lX1BxgHT28dNT8nhTD2FCXZdGARtn52ur0x5iyr6aEdaO+Jcv3lmZvMpU5Y4m",
-	"6VlDLNidowpYZjIHj+9OGirlK/KV7f3JHIdNGSKA1iZAhPJilPeh7wcKOQgx5g+Y0TPSzGOJKniMnc9Y",
-	"PesOiGAjE/l15qpgXPNGZkwNbhNpXdex38BOe3eKmfPl9dPqI/DfNbk7U76xWSeLagMTesbuH4ws/Ex4",
-	"JzP503wnI/NusOehGffBD9HseZvK6M+6p3tPD4Bhtj9/Hcqkn+ugDYyr+F/uXIkQe7orSxdkMskoYw8v",
-	"1SFYJQMoUwlcNfmya5+nWRyIk0gX0/ajNnuO6Y6m/d6bRDyF8i8LDReOzH+of7wCH71KgcMS8V40A2jf",
-	"V4Vf8PyNGhxSRtWQ4c1VqE7L3ikCIS0bLsKvWLZwKY+fdxNfMNftcjT2zkU+W1rk5fL6SpyvjUarUJy5",
-	"slMi8Ttg5axYXnwIkonk47zIRbpIj9pWQgu1kZn8NV2kC5nIGriIoFo25qoAalHWrhVUjV6R6UYv6G1Z",
-	"ol2hIPS1sx5DtFQs45b3AoR6tACrE9HUzgrfxPolYoUWCRi94AIF9ikYK86X1+J+Ls4+fhKtDKYy4qW4",
-	"cD7okHZAeNYCTEaPk5vpidiZzF94vGxv2wKj51OnNyFv5SyjbXfKoc3XstUuyL6U8KISjlbWdtxb3Uro",
-	"yY2VOF4sngGkqvu4dt8LVd0r/u3zRNO/22v6+fr4sxwj3u0eY4E2k4tnGBaBZ41qc38vBko+CWB/6vaj",
-	"P8dXWGSRpXEnXhfYP8hEAb7tMdSo09DpJ89yVpPLS6zeWLj9h+kBUB5pjSSUa0otrGPRWI0UVFHHru9B",
-	"6wYFO9E/Lv3GMnztwB99d/BPVX0C/rKVWTNW2nQkZHHahhJ2c7u9DQZda/km799IsXtXOCEjfyALEKXx",
-	"LNxdZMU3+ezxnoA1mBLyEoWzggvjRQWqMBYPqMLVMOibxmc0z48+Jsh91e4dbvinC/hNPRz//g8AAP//",
+	"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",
+	"/w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,
