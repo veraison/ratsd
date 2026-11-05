@@ -106,6 +106,21 @@ func (e ChaResRequestNonceAdjustFunction) Valid() bool {
 	}
 }
 
+// Defines values for DiscoveryServiceState.
+const (
+	READY DiscoveryServiceState = "READY"
+)
+
+// Valid indicates whether the value is a known member of the DiscoveryServiceState enum.
+func (e DiscoveryServiceState) Valid() bool {
+	switch e {
+	case READY:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EATEatProfile.
 const (
 	TagGithubCom2024Veraisonratsd EATEatProfile = "tag:github.com,2024:veraison/ratsd"
@@ -236,6 +251,30 @@ type ChaResRequest struct {
 // ChaResRequestNonceAdjustFunction Function used when an attester's required nonce size differs from the input nonce size. Matching-size nonces are passed through unchanged.
 type ChaResRequestNonceAdjustFunction string
 
+// Discovery defines model for Discovery.
+type Discovery struct {
+	// ApiEndpoints API operation names mapped to paths relative to the origin.
+	ApiEndpoints map[string]string `json:"api-endpoints"`
+
+	// MediaTypes Supported response media types for POST /ratsd/chares, including profile parameters.
+	MediaTypes []string `json:"media-types"`
+
+	// NonceAdjustFunctions Values accepted by the nonce-adjust-function request field, independent of the available sub-attesters.
+	NonceAdjustFunctions []string `json:"nonce-adjust-functions"`
+
+	// ServiceState The daemon is ready to serve requests; this does not guarantee that individual attesters can collect evidence.
+	ServiceState DiscoveryServiceState `json:"service-state"`
+
+	// Subattesters Available sub-attesters and their request options; empty when none are loaded.
+	Subattesters []SubAttester `json:"subattesters"`
+
+	// Version Daemon build version.
+	Version string `json:"version"`
+}
+
+// DiscoveryServiceState The daemon is ready to serve requests; this does not guarantee that individual attesters can collect evidence.
+type DiscoveryServiceState string
+
 // EAT defines model for EAT.
 type EAT struct {
 	EatProfile  EATEatProfile `json:"eat_profile"`
@@ -253,6 +292,15 @@ type Option struct {
 
 // OptionDataType defines model for Option.DataType.
 type OptionDataType string
+
+// ProblemDetails defines model for ProblemDetails.
+type ProblemDetails struct {
+	Detail   *string `json:"detail,omitempty"`
+	Instance *string `json:"instance,omitempty"`
+	Status   *int    `json:"status,omitempty"`
+	Title    *string `json:"title,omitempty"`
+	Type     *string `json:"type,omitempty"`
+}
 
 // SubAttester defines model for SubAttester.
 type SubAttester struct {
@@ -391,6 +439,9 @@ func (a ChaResRequest) MarshalJSON() ([]byte, error) {
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
+	// (GET /.well-known/veraison/ratsd)
+	RatsdDiscovery(w http.ResponseWriter, r *http.Request)
+
 	// (POST /ratsd/chares)
 	RatsdChares(w http.ResponseWriter, r *http.Request, params RatsdCharesParams)
 
@@ -409,6 +460,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// RatsdDiscovery operation middleware
+func (siw *ServerInterfaceWrapper) RatsdDiscovery(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RatsdDiscovery(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // RatsdChares operation middleware
 func (siw *ServerInterfaceWrapper) RatsdChares(w http.ResponseWriter, r *http.Request) {
@@ -605,6 +670,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/.well-known/veraison/ratsd", wrapper.RatsdDiscovery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/ratsd/chares", wrapper.RatsdChares)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ratsd/nonce-adjust-functions", wrapper.RatsdNonceAdjustFunctions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/ratsd/subattesters", wrapper.RatsdSubattesters)
@@ -617,27 +683,36 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"G/3tkqQ7Y6BSfv8o/zJCin//DwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

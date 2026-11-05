@@ -35,6 +35,16 @@ func (o cfg) Validate() error {
 	return nil
 }
 
+func newRouter(server api.ServerInterface, authorizer auth.IAuthorizer) http.Handler {
+	protected := api.HandlerWithOptions(server, api.StdHTTPServerOptions{
+		Middlewares: []api.MiddlewareFunc{authorizer.GetMiddleware},
+	})
+	router := http.NewServeMux()
+	router.HandleFunc("GET /.well-known/veraison/ratsd", server.RatsdDiscovery)
+	router.Handle("/", protected)
+	return router
+}
+
 func main() {
 	config.CmdLine()
 
@@ -101,15 +111,9 @@ func main() {
 	log.Info("Loaded sub-attesters:", pluginManager.GetPluginList())
 
 	svr := api.NewServer(log.Named("api"), pluginManager, cfg.ListOptions)
-	r := http.NewServeMux()
-	options := api.StdHTTPServerOptions{
-		BaseRouter:  r,
-		Middlewares: []api.MiddlewareFunc{authorizer.GetMiddleware},
-	}
-	h := api.HandlerWithOptions(svr, options)
 
 	s := &http.Server{
-		Handler: h,
+		Handler: newRouter(svr, authorizer),
 		Addr:    cfg.ListenAddr,
 	}
 

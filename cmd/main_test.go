@@ -3,14 +3,70 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/veraison/ratsd/api"
+	mock_deps "github.com/veraison/ratsd/api/mocks"
+	"github.com/veraison/ratsd/auth"
 	"github.com/veraison/ratsd/config"
+	"github.com/veraison/ratsd/log"
 )
+
+func TestPublicDiscovery(test *testing.T) {
+	settings := viper.New()
+	settings.Set("backend", "basic")
+	settings.Set("users.foo.password", "$2b$12$yH/i2alYaIrVbKFkaYu5HOSf3JiZ0zPJlooufSRdO.6V3X/hXgTOq")
+	authorizer, err := auth.NewAuthorizer(settings, log.Named("test"))
+	require.NoError(test, err)
+	test.Cleanup(func() { require.NoError(test, authorizer.Close()) })
+
+	for _, testCase := range []struct {
+		name          string
+		method        string
+		path          string
+		authenticated bool
+		wantStatus    int
+		listAttesters bool
+	}{
+		{name: "public discovery", method: http.MethodGet, path: "/.well-known/veraison/ratsd", wantStatus: http.StatusOK, listAttesters: true},
+		{name: "public discovery HEAD", method: http.MethodHead, path: "/.well-known/veraison/ratsd", wantStatus: http.StatusOK, listAttesters: true},
+		{name: "protected evidence", method: http.MethodPost, path: "/ratsd/chares", wantStatus: http.StatusUnauthorized},
+		{name: "protected attesters", method: http.MethodGet, path: "/ratsd/subattesters", wantStatus: http.StatusUnauthorized},
+		{name: "protected nonce functions", method: http.MethodGet, path: "/ratsd/nonce-adjust-functions", wantStatus: http.StatusUnauthorized},
+		{name: "authenticated evidence", method: http.MethodPost, path: "/ratsd/chares", authenticated: true, wantStatus: http.StatusBadRequest},
+		{name: "authenticated attesters", method: http.MethodGet, path: "/ratsd/subattesters", authenticated: true, wantStatus: http.StatusOK, listAttesters: true},
+		{name: "authenticated nonce functions", method: http.MethodGet, path: "/ratsd/nonce-adjust-functions", authenticated: true, wantStatus: http.StatusOK},
+	} {
+		test.Run(testCase.name, func(test *testing.T) {
+			controller := gomock.NewController(test)
+			manager := mock_deps.NewMockIManager(controller)
+			if testCase.listAttesters {
+				manager.EXPECT().GetPluginList().Return([]string{})
+			}
+			server := api.NewServer(log.Named("test"), manager, "all")
+			request := httptest.NewRequest(testCase.method, testCase.path, nil)
+			if testCase.authenticated {
+				request.SetBasicAuth("foo", "Pa55w0rd$")
+			}
+			response := httptest.NewRecorder()
+			newRouter(server, authorizer).ServeHTTP(response, request)
+			assert.Equal(test, testCase.wantStatus, response.Code)
+			if testCase.wantStatus == http.StatusUnauthorized {
+				assert.NotEmpty(test, response.Header().Get("WWW-Authenticate"))
+			} else {
+				assert.Empty(test, response.Header().Get("WWW-Authenticate"))
+			}
+		})
+	}
+}
 
 func TestCommandLine(test *testing.T) {
 	for _, testCase := range []struct {
